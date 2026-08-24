@@ -50,53 +50,67 @@ const VFS = (() => {
     return p.split("/").pop();
   }
 
+  const virt = {};
+
+  function registerVirtual(p, reader) {
+    virt[norm(p)] = reader;
+  }
+
+  function ensureDir(p, extra = {}) {
+    p = norm(p);
+    if (!mem[p]) mem[p] = { type: "dir", mtime: now(), owner: extra.owner || "root", ...extra };
+    return mem[p];
+  }
+
+  function fhs() {
+    [
+      "/", "/home", "/home/oubento", "/home/oubento/Desktop", "/home/oubento/Documents",
+      "/home/oubento/Downloads", "/home/oubento/Pictures", "/home/oubento/Music",
+      "/home/oubento/Videos", "/home/oubento/Templates", "/home/oubento/Public",
+      "/root", "/etc", "/etc/apt", "/etc/apt/sources.list.d", "/etc/network", "/etc/systemd",
+      "/etc/systemd/system", "/bin", "/sbin", "/usr", "/usr/bin", "/usr/sbin", "/usr/lib",
+      "/usr/lib/python3.12", "/usr/share", "/usr/share/doc", "/usr/local", "/usr/local/bin",
+      "/opt", "/tmp", "/var", "/var/log", "/var/log/journal", "/var/lib", "/var/lib/dpkg",
+      "/var/cache", "/var/cache/apt", "/var/run", "/run", "/run/systemd", "/proc", "/proc/sys",
+      "/sys", "/sys/class", "/sys/class/net", "/dev", "/dev/pts", "/mnt", "/media", "/boot",
+      "/lib", "/lib64", "/.trash",
+    ].forEach((p) => {
+      const owner = p.startsWith("/home/oubento") || p === "/tmp" || p === "/.trash" ? "oubento" : "root";
+      ensureDir(p, { owner, mode: p === "/tmp" ? 1777 : p === "/root" ? 700 : 755 });
+    });
+  }
+
   function seed() {
     const ts = now();
-    const dir = (extra = {}) => ({ type: "dir", mtime: ts, ...extra });
     const file = (content, mime = "text/plain") => ({
       type: "file",
       content,
       mime,
       size: new Blob([content]).size,
       mtime: ts,
+      owner: "root",
     });
-    mem = {
-      "/": dir(),
-      "/home": dir(),
-      "/home/oubento": dir({ label: "Home" }),
-      "/home/oubento/Desktop": dir(),
-      "/home/oubento/Documents": dir(),
-      "/home/oubento/Downloads": dir(),
-      "/home/oubento/Pictures": dir(),
-      "/home/oubento/Music": dir(),
-      "/home/oubento/Videos": dir(),
-      "/home/oubento/Templates": dir(),
-      "/home/oubento/Public": dir(),
-      "/usr": dir({ owner: "root" }),
-      "/usr/bin": dir({ owner: "root" }),
-      "/usr/share": dir({ owner: "root" }),
-      "/bin": dir({ owner: "root" }),
-      "/sbin": dir({ owner: "root" }),
-      "/opt": dir({ owner: "root" }),
-      "/root": dir({ owner: "root", mode: 700 }),
-      "/etc": dir({ owner: "root" }),
-      "/tmp": dir({ owner: "oubento", mode: 1777 }),
-      "/var": dir({ owner: "root" }),
-      "/var/log": dir({ owner: "root" }),
-      "/proc": dir({ owner: "root" }),
-      "/.trash": dir(),
-    };
+    mem = {};
+    fhs();
     mem["/etc/os-release"] = file(
       [
         "NAME=\"Oubento\"",
         "PRETTY_NAME=\"Oubento 24.04 LTS (Noble Numbat)\"",
-        "VERSION=\"24.04.1 LTS\"",
+        "VERSION=\"24.04.4 LTS\"",
+        "VERSION_ID=\"24.04\"",
         "ID=oubento",
         "ID_LIKE=ubuntu debian",
         "HOME_URL=\"https://ubuntu.com/\"",
         "SUPPORT_URL=\"https://help.ubuntu.com/\"",
+        "GUEST=1",
       ].join("\n") + "\n"
     );
+    mem["/etc/apt/sources.list"] = file("deb https://oubento.local/ubuntu noble main restricted universe multiverse\n");
+    mem["/etc/hosts"] = file("127.0.0.1 localhost\n127.0.1.1 oubento-phone\n::1 localhost ip6-localhost\n");
+    mem["/etc/resolv.conf"] = file("nameserver 1.1.1.1\nnameserver 8.8.8.8\n");
+    mem["/etc/fstab"] = file("vfs / vfs defaults 0 1\ntmpfs /tmp tmpfs defaults 0 0\n");
+    mem["/etc/issue"] = file("Oubento 24.04.4 LTS \\n \\l\n");
+    mem["/.oubento-fs-version"] = file("4\n");
     mem["/etc/hostname"] = file("oubento-phone\n");
     mem["/home/oubento/.bashrc"] = file(
       "export PS1='\\u@\\h:\\w$ '\nalias ll='ls -la'\n"
@@ -150,10 +164,7 @@ const VFS = (() => {
   }
 
   function migrate() {
-    const extra = ["/root", "/bin", "/sbin", "/opt", "/usr/bin", "/proc"];
-    extra.forEach((p) => {
-      if (!mem[p]) mem[p] = { type: "dir", mtime: now(), owner: "root" };
-    });
+    fhs();
     Object.keys(mem).forEach((k) => {
       if (!mem[k].owner) mem[k].owner = k.startsWith("/home/oubento") || k.startsWith("/tmp") || k.startsWith("/.trash") ? "oubento" : "root";
     });
@@ -163,12 +174,16 @@ const VFS = (() => {
     if (!mem["/etc/passwd"]) {
       mem["/etc/passwd"] = { type: "file", content: "root:x:0:0:root:/root:/bin/bash\noubento:x:1000:1000:Oubento:/home/oubento:/bin/bash\n", mime: "text/plain", owner: "root", mtime: now() };
     }
+    if (!mem["/etc/hosts"]) {
+      mem["/etc/hosts"] = { type: "file", content: "127.0.0.1 localhost\n127.0.1.1 oubento-phone\n", mime: "text/plain", owner: "root", mtime: now() };
+    }
+    mem["/.oubento-fs-version"] = { type: "file", content: "4\n", mime: "text/plain", owner: "root", mtime: now() };
   }
 
   function isSystem(p) {
     p = norm(p);
     if (p.startsWith("/home/oubento") || p.startsWith("/tmp") || p.startsWith("/.trash")) return false;
-    return p === "/" || p.startsWith("/etc") || p.startsWith("/usr") || p.startsWith("/var") || p.startsWith("/bin") || p.startsWith("/sbin") || p.startsWith("/root") || p.startsWith("/proc") || p.startsWith("/opt");
+    return p === "/" || p.startsWith("/etc") || p.startsWith("/usr") || p.startsWith("/var") || p.startsWith("/bin") || p.startsWith("/sbin") || p.startsWith("/root") || p.startsWith("/proc") || p.startsWith("/opt") || p.startsWith("/sys") || p.startsWith("/dev") || p.startsWith("/run") || p.startsWith("/lib") || p.startsWith("/boot");
   }
 
   function canWrite(p) {
@@ -181,11 +196,17 @@ const VFS = (() => {
   }
 
   function exists(p) {
-    return !!mem[norm(p)];
+    p = norm(p);
+    return !!mem[p] || !!virt[p];
   }
 
   function stat(p) {
-    return mem[norm(p)] || null;
+    p = norm(p);
+    if (virt[p]) {
+      const content = String(virt[p]() ?? "");
+      return { type: "file", content, mime: "text/plain", size: content.length, mtime: now(), owner: "root", virtual: true };
+    }
+    return mem[p] || null;
   }
 
   function list(p) {
@@ -193,10 +214,20 @@ const VFS = (() => {
     const node = mem[p];
     if (!node || node.type !== "dir") return [];
     const prefix = p === "/" ? "/" : p + "/";
-    return Object.keys(mem)
-      .filter((k) => k !== p && k.startsWith(prefix) && !k.slice(prefix.length).includes("/"))
-      .map((k) => ({ path: k, name: base(k), ...mem[k] }))
-      .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, "ar") : a.type === "dir" ? -1 : 1));
+    const names = new Set();
+    const out = [];
+    Object.keys(mem).forEach((k) => {
+      if (k !== p && k.startsWith(prefix) && !k.slice(prefix.length).includes("/")) {
+        names.add(k);
+        out.push({ path: k, name: base(k), ...mem[k] });
+      }
+    });
+    Object.keys(virt).forEach((k) => {
+      if (k !== p && k.startsWith(prefix) && !k.slice(prefix.length).includes("/") && !names.has(k)) {
+        out.push({ path: k, name: base(k), ...stat(k) });
+      }
+    });
+    return out.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, "ar") : a.type === "dir" ? -1 : 1));
   }
 
   async function mkdir(p) {
@@ -227,7 +258,9 @@ const VFS = (() => {
   }
 
   function read(p) {
-    const n = mem[norm(p)];
+    p = norm(p);
+    if (virt[p]) return virt[p]();
+    const n = mem[p];
     if (!n || n.type !== "file") throw new Error("not a file");
     return n.content;
   }
@@ -319,7 +352,8 @@ const VFS = (() => {
 
   return {
     init, persist, norm, parent, base, exists, stat, list, mkdir, write, read,
-    remove, rename, copy, emptyTrash, tree, usage, find, seed,
+    remove, rename, copy, emptyTrash, tree, usage, find, seed, canWrite, isSystem,
+    ensureDir, registerVirtual,
     get raw() { return mem; },
   };
 })();

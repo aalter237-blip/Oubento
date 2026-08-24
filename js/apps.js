@@ -11,45 +11,6 @@ function storeSet(k, v) {
   localStorage.setItem("oubento-" + k, JSON.stringify(v));
 }
 
-function pyRun(args) {
-  const joined = args.join(" ");
-  let code = "";
-  if (args[0] === "-c") code = args.slice(1).join(" ").replace(/^['"]|['"]$/g, "");
-  else if (args[0] && !args[0].startsWith("-")) {
-    try {
-      code = String(VFS.read(args[0].startsWith("/") ? args[0] : "/home/oubento/" + args[0]));
-    } catch {
-      return "python: can't open file '" + args[0] + "': No such file";
-    }
-  } else {
-    return [
-      "Python 3.12.3 (Oubento guest)",
-      "Examples:",
-      "  python3 -c \"print(2+2)\"",
-      "  python3 -c \"import math; print(math.sqrt(16))\"",
-      "  python3 script.py",
-    ].join("\n");
-  }
-  try {
-    const out = [];
-    const src = code
-      .replace(/#.*$/gm, "")
-      .replace(/\bTrue\b/g, "true")
-      .replace(/\bFalse\b/g, "false")
-      .replace(/\bNone\b/g, "null")
-      .replace(/\belif\b/g, "else if")
-      .replace(/\bprint\s*\(/g, "__p(");
-    const math = Math;
-    const random = { random: Math.random, randint: (a, b) => a + Math.floor(Math.random() * (b - a + 1)) };
-    const sys = { version: "3.12.3", platform: "linux" };
-    const __p = (...x) => out.push(x.map(String).join(" "));
-    Function("math", "random", "sys", "__p", `"use strict";\n${src}`)(math, random, sys, __p);
-    return out.join("\n") || "";
-  } catch (e) {
-    return "Traceback (most recent call last):\n  File \"<stdin>\", line 1\n" + e.message;
-  }
-}
-
 /* ---------------- Files ---------------- */
 APPS.files = {
   mount(el, ctx) {
@@ -187,440 +148,57 @@ function fileMenu(x, y, p, refresh) {
 /* ---------------- Terminal ---------------- */
 APPS.terminal = {
   mount(el) {
-    let cwd = "/home/oubento";
+    const sess = KERNEL.makeSession();
     const hist = [];
     let hi = 0;
-    const env = { USER: OS.user, HOME: AUTH.current().home, HOST: OS.hostname, PATH: "/usr/bin:/bin:/sbin" };
     el.innerHTML = `<div class="term"><div class="term-out" id="tout"></div>
       <div class="term-in"><span class="prompt" id="pr"></span><input id="tin" spellcheck="false"></div></div>`;
     const out = el.querySelector("#tout");
     const input = el.querySelector("#tin");
     const pr = el.querySelector("#pr");
     const prompt = () => {
-      env.USER = OS.user;
-      env.HOME = AUTH.current().home;
-      const short = cwd.replace(env.HOME, "~");
+      sess.env.USER = OS.user;
+      sess.env.HOME = AUTH.current().home;
+      sess.env.HOST = OS.hostname;
+      const short = sess.cwd.replace(sess.env.HOME, "~");
       const mark = AUTH.isRoot() ? "#" : "$";
       pr.textContent = `${OS.user}@${OS.hostname}:${short}${mark}`;
       pr.style.color = AUTH.isRoot() ? "#ff8a80" : "#7cfc9a";
     };
-    const print = (s, cls = "") => {
+    const print = (txt, cls = "") => {
       const d = document.createElement("div");
       if (cls) d.className = cls;
-      d.textContent = s;
+      d.textContent = txt;
       out.appendChild(d);
       out.scrollTop = out.scrollHeight;
     };
-    const html = (s) => {
-      const d = document.createElement("div");
-      d.innerHTML = s;
-      out.appendChild(d);
-      out.scrollTop = out.scrollHeight;
-    };
-    print(`Oubento ${OS.version} LTS (${OS.codename})`);
-    print(`Type 'help' or 'neofetch'.`);
+    print(`Oubento ${OS.version} LTS (${OS.codename}) · guest kernel ${KERNEL.version}`);
+    print("Self-contained OS inside the app. Type 'help' or 'neofetch'.");
     prompt();
     input.focus();
     el.querySelector(".term").onclick = () => input.focus();
+    KERNEL.spawn("oush", OS.user);
 
-    const commands = {
-      help: () =>
-        "ls cd pwd cat echo mkdir rm touch nano vim date whoami id uname hostname clear history neofetch\napt pkg dnf pacman yum pip python python3 node ping nslookup curl wget\nfree df ps top htop tree find grep head tail wc which man ip ifconfig\nsudo su reboot shutdown lsb_release fortune cowsay calc git ssh env export exit",
-      ls: (a) => {
-        const p = a[0] && !a[0].startsWith("-") ? resolve(a[0]) : cwd;
-        return VFS.list(p)
-          .map((i) => (i.type === "dir" ? i.name + "/" : i.name))
-          .join("  ") || "";
-      },
-      ll: () =>
-        VFS.list(cwd)
-          .map((i) => `${i.type === "dir" ? "d" : "-"}rw-r--r--  ${String(i.size || 0).padStart(8)}  ${i.mtime?.slice(0, 16) || ""}  ${i.name}`)
-          .join("\n"),
-      cd: (a) => {
-        const p = resolve(a[0] || env.HOME);
-        if (!VFS.exists(p) || VFS.stat(p).type !== "dir") return "cd: no such directory";
-        cwd = p;
-        prompt();
-        return "";
-      },
-      pwd: () => cwd,
-      cat: (a) => {
-        try {
-          const c = VFS.read(resolve(a[0]));
-          return typeof c === "string" && c.startsWith("data:") ? "[binary]" : String(c);
-        } catch {
-          return "cat: no such file";
-        }
-      },
-      echo: (a) => a.join(" ").replace(/\$(\w+)/g, (_, k) => env[k] || ""),
-      mkdir: async (a) => {
-        try {
-          await VFS.mkdir(resolve(a[0]));
-          return "";
-        } catch (e) {
-          return "mkdir: " + e.message;
-        }
-      },
-      touch: async (a) => {
-        await VFS.write(resolve(a[0]), VFS.exists(resolve(a[0])) ? VFS.read(resolve(a[0])) : "");
-        return "";
-      },
-      rm: async (a) => {
-        try {
-          await VFS.remove(resolve(a[a[0] === "-r" ? 1 : 0]));
-          return "";
-        } catch (e) {
-          return "rm: " + e.message;
-        }
-      },
-      date: () => new Date().toString(),
-      whoami: () => OS.user,
-      id: () => {
-        const u = AUTH.current();
-        return `uid=${u.uid}(${OS.user}) gid=${u.gid}(${OS.user}) groups=${u.groups.join(",")}${AUTH.isRoot() ? " euid=0(root)" : ""}`;
-      },
-      hostname: () => OS.hostname,
-      uname: (a) => (a.includes("-a") ? `Linux ${OS.hostname} 6.8.0-oubento aarch64 GNU/Linux` : "Linux"),
-      clear: () => {
-        out.innerHTML = "";
-        return "";
-      },
-      history: () => hist.map((c, i) => `${i + 1}  ${c}`).join("\n"),
-      neofetch: () => {
-        const u = VFS.usage();
-        return [
-          "            .-/ +osssssso+/-.            " + OS.user + "@" + OS.hostname,
-          "        `:+ssssssssssssssssss+:`        -----------",
-          "      -+ssssssssssssssssssyyssss+-      OS: Oubento " + OS.version + " LTS",
-          "    .ossssssssssssssssssdMMMNysssso.    Host: Phone (Web Runtime)",
-          "   /ssssssssssshdmmNNmmyNMMMMhssssss/   Kernel: 6.8.0-oubento",
-          "  +ssssssssshmydMMMMMMMNddddyssssssss+  Uptime: " + Math.floor((Date.now() - OS.startedAt) / 60000) + " min",
-          " /sssssssshNMMMyhhyyyyhmNMMMNhssssssss/ Shell: oush 1.0",
-          ".ssssssssdMMMNhsssssssssshNMMMdssssssss. DE: GNOME / Yaru",
-          "+sssshhhyNMMNyssssssssssssyNMMMysssssss+ WM: oubento-shell",
-          "ossyNMMMNyMMhsssssssssssssshmmmhssssssso Theme: Yaru-dark",
-          "ossyNMMMNyMMhsssssssssssssshmmmhssssssso Terminal: oush",
-          "+sssshhhyNMMNyssssssssssssyNMMMysssssss+ CPU: WebCore",
-          ".ssssssssdMMMNhsssssssssshNMMMdssssssss. Memory: " + fmtSize(u.bytes) + " files",
-          " /sssssssshNMMMyhhyyyyhdNMMMNhssssssss/",
-        ].join("\n");
-      },
-      apt: async (a) => {
-        if (["update", "upgrade", "install", "remove"].includes(a[0]) && !AUTH.isRoot()) {
-          return "E: Permission denied. Use: sudo apt " + a.join(" ");
-        }
-        if (a[0] === "update") return "Hit:1 oubento-repo noble InRelease\nReading package lists... Done";
-        if (a[0] === "upgrade") return "0 upgraded, 0 newly installed.";
-        if (a[0] === "install") {
-          const id = (a[1] || "").toLowerCase();
-          const pkgs = storeGet("syspkgs", ["bash", "coreutils", "neofetch"]);
-          const known = ["python", "python3", "pip", "node", "git", "vim", "nano", "curl", "wget", "htop", "ping", "openssh"];
-          if (id && CATALOG.some((c) => c.id === id)) {
-            if (!isInstalled(id)) {
-              OS.settings.installed.push(id);
-              saveSettings();
-            }
-            return `Setting up ${id} ...\nProcessing triggers ... done.`;
-          }
-          if (known.includes(id) || id) {
-            if (!pkgs.includes(id)) pkgs.push(id);
-            storeSet("syspkgs", pkgs);
-            return `Get:1 oubento-repo ${id}\nUnpacking ${id} ...\nSetting up ${id} (guest) ...\n${id} is ready. Try: ${id === "python" || id === "python3" ? "python3 -c 'print(2+2)'" : id}`;
-          }
-          return "E: Unable to locate package " + (a[1] || "");
-        }
-        if (a[0] === "list") return CATALOG.map((c) => c.id + "/noble " + (isInstalled(c.id) ? "[installed]" : "")).join("\n");
-        return "apt 2.7.14 (oubento)\nusage: apt update|upgrade|install|list";
-      },
-      free: () => "               total        used        free\nMem:         8192000     2400000     5792000",
-      df: () => {
-        const u = VFS.usage();
-        return `Filesystem     Size  Used Avail\nvfs            512M  ${fmtSize(u.bytes)}  rest`;
-      },
-      ps: () =>
-        "PID TTY          TIME CMD\n  1 ?        00:00:01 systemd\n" +
-        OS.state.windows.map((w, i) => `${120 + i} pts/0    00:00:00 ${w.app}`).join("\n"),
-      top: () => commands.ps() + "\n%Cpu: 4.2  Mem: 29%",
-      htop: () => commands.top(),
-      tree: (a) => VFS.tree(a[0] ? resolve(a[0]) : cwd, 3),
-      find: (a) => VFS.find(a[0] || "", cwd).map((i) => i.path).join("\n"),
-      grep: (a) => {
-        const q = a[0];
-        const f = a[1] && resolve(a[1]);
-        try {
-          return String(VFS.read(f))
-            .split("\n")
-            .filter((l) => l.includes(q))
-            .join("\n");
-        } catch {
-          return "grep: error";
-        }
-      },
-      head: (a) => {
-        try {
-          return String(VFS.read(resolve(a[0] || a[1])))
-            .split("\n")
-            .slice(0, 10)
-            .join("\n");
-        } catch {
-          return "";
-        }
-      },
-      tail: (a) => {
-        try {
-          return String(VFS.read(resolve(a[0] || a[1])))
-            .split("\n")
-            .slice(-10)
-            .join("\n");
-        } catch {
-          return "";
-        }
-      },
-      wc: (a) => {
-        try {
-          const s = String(VFS.read(resolve(a[0])));
-          return `${s.split("\n").length} ${s.split(/\s+/).length} ${s.length}`;
-        } catch {
-          return "0";
-        }
-      },
-      lsb_release: () => {
-        const d = currentDistro();
-        return `Distributor ID: ${d.name}\nDescription:    ${d.name} ${d.version} (${d.codename})\nRelease:        ${d.version}\nCodename:       ${d.codename}\nDesktop:        ${d.session}`;
-      },
-      sudo: async (a) => {
-        if (!a.length) return "usage: sudo [-i] <command>";
-        if (a[0] === "-i" || a[0] === "su" || a[0] === "-") {
-          if (!AUTH.isRoot()) {
-            const ok = await AUTH.ask("sudo -i");
-            if (!ok) return "sudo: Authentication failure";
-          }
-          AUTH.session = "root";
-          OS.user = "root";
-          env.USER = "root";
-          env.HOME = "/root";
-          cwd = "/root";
-          prompt();
-          renderStatus();
-          return "root@ " + t("authScope");
-        }
-        if (!AUTH.isRoot()) {
-          const ok = await AUTH.ask("sudo " + a.join(" "));
-          if (!ok) return "sudo: Authentication failure";
-        }
-        return await runInner(a[0], a.slice(1));
-      },
-      su: async (a) => commands.sudo(a[0] === "-" || !a.length ? ["-i"] : a),
-      passwd: () => "Password unchanged. Guest root password remains: ubuntu",
-      chmod: (a) => (AUTH.isRoot() ? "mode of '" + (a[1] || ".") + "' changed to " + (a[0] || "755") : "chmod: Operation not permitted"),
-      chown: (a) => (AUTH.isRoot() ? "ownership of '" + (a[1] || ".") + "' changed" : "chown: Operation not permitted"),
-      pacman: (a) => commands.apt(a[0] === "-S" ? ["install", a[1]] : a[0] === "-Syu" ? ["upgrade"] : ["list"]),
-      dnf: (a) => commands.apt(a),
-      zypper: (a) => commands.apt(a),
-      startx: (a) => {
-        if (a[0]) applyDistro(a[0], { persist: true, rerender: true });
-        return "started " + currentDistro().session;
-      },
-      fortune: () =>
-        [
-          "With great power comes great responsibility. Also sudo.",
-          "There's no place like ~",
-          "Have you tried turning it off and on again?",
-          "Ubuntu is an ancient African word meaning 'I can't configure Debian'.",
-        ][Math.floor(Math.random() * 4)],
-      cowsay: (a) => {
-        const m = a.join(" ") || "moo";
-        return ` ${"_".repeat(m.length + 2)}\n< ${m} >\n ${"-".repeat(m.length + 2)}\n        \\   ^__^\n         \\  (oo)\\_______\n            (__)\\       )\\/\\\n                ||----w |\n                ||     ||`;
-      },
-      man: (a) => `Manual page ${a[0] || "oubento"} (1)\nA complete Ubuntu-like mobile operating environment.`,
-      env: () => Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n"),
-      export: (a) => {
-        const [k, v] = (a[0] || "").split("=");
-        if (k && v) env[k] = v;
-        return "";
-      },
-      open: (a) => {
-        launch("files", { path: resolve(a[0] || cwd), force: true });
-        return "";
-      },
-      nano: (a) => {
-        launch("editor", { path: resolve(a[0] || cwd + "/untitled.txt"), force: true });
-        return "";
-      },
-      weather: async () => {
-        try {
-          const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=24.7&longitude=46.7&current_weather=true");
-          const j = await r.json();
-          return `Riyadh ${j.current_weather.temperature}°C  wind ${j.current_weather.windspeed}`;
-        } catch {
-          return "weather: offline";
-        }
-      },
-      curl: async (a) => {
-        try {
-          const r = await fetch(a[0]);
-          const t = await r.text();
-          return t.slice(0, 800);
-        } catch {
-          return "curl: failed";
-        }
-      },
-      wget: async (a) => {
-        try {
-          const r = await fetch(a[0]);
-          const t = await r.text();
-          const name = a[0].split("/").pop() || "index.html";
-          await VFS.write("/home/oubento/Downloads/" + name, t, "text/plain");
-          return `saved '${name}'`;
-        } catch {
-          return "wget: failed";
-        }
-      },
-      ip: () => "wlan0: inet 192.168.1.42/24\nlo: inet 127.0.0.1/8",
-      reboot: () => {
-        location.reload();
-        return "Rebooting...";
-      },
-      shutdown: () => {
-        OS.state.locked = true;
-        document.getElementById("lock").hidden = false;
-        return "";
-      },
-      calc: (a) => {
-        try {
-          return String(Function(`"use strict";return (${a.join("")})`)());
-        } catch {
-          return "NaN";
-        }
-      },
-      pkg: (a) => commands.apt(a),
-      yum: (a) => commands.apt(a),
-      apk: (a) => commands.apt(a[0] === "add" ? ["install", a[1]] : a),
-      pip: (a) => {
-        if (a[0] === "install") return `Collecting ${a[1] || "package"}\nInstalling collected packages: ${a[1]}\nSuccessfully installed ${a[1]}-guest`;
-        if (a[0] === "list") return "pip 24.0 from /usr/lib/python3/dist-packages";
-        return "Usage: pip install <name>";
-      },
-      ping: async (a) => {
-        const host = (a.find((x) => !x.startsWith("-")) || "1.1.1.1").replace(/^https?:\/\//, "").split("/")[0];
-        const n = 4;
-        const lines = [`PING ${host} (${host}) 56(84) bytes of data.`];
-        for (let i = 0; i < n; i++) {
-          const t0 = performance.now();
-          try {
-            await fetch("https://" + host, { mode: "no-cors", cache: "no-store" });
-            lines.push(`64 bytes from ${host}: icmp_seq=${i + 1} ttl=56 time=${(performance.now() - t0).toFixed(1)} ms`);
-          } catch {
-            lines.push(`From oubento: icmp_seq=${i + 1} Destination Host Unreachable`);
-          }
-        }
-        lines.push(`--- ${host} ping statistics ---`, `${n} packets transmitted, ${n} received`);
-        return lines.join("\n");
-      },
-      nslookup: async (a) => {
-        const host = a[0] || "ubuntu.com";
-        try {
-          const r = await fetch("https://dns.google/resolve?name=" + encodeURIComponent(host) + "&type=A");
-          const j = await r.json();
-          const ans = (j.Answer || []).map((x) => x.data).join("\n");
-          return `Server:\tdns.google\nName:\t${host}\n${ans || "NXDOMAIN"}`;
-        } catch {
-          return "nslookup: failed";
-        }
-      },
-      python: (a) => pyRun(a),
-      python3: (a) => commands.python(a),
-      py: (a) => commands.python(a),
-      node: (a) => {
-        const code = a[0] === "-e" || a[0] === "-c" ? a.slice(1).join(" ") : a.join(" ");
-        if (!code) return "Welcome to Node.js 20 (guest).\nUse: node -e 'console.log(1+1)'";
-        try {
-          const logs = [];
-          const consoleFake = { log: (...x) => logs.push(x.join(" ")) };
-          Function("console", `"use strict";${code}`)(consoleFake);
-          return logs.join("\n") || "undefined";
-        } catch (e) {
-          return String(e.message);
-        }
-      },
-      which: (a) => (a[0] && (commands[a[0].toLowerCase()] || commands[a[0]]) ? "/usr/bin/" + a[0].toLowerCase() : ""),
-      ifconfig: () => commands.ip(),
-      vim: (a) => commands.nano(a),
-      vi: (a) => commands.nano(a),
-      git: (a) => {
-        if (a[0] === "status") return "On branch guest\nnothing to commit, working tree clean";
-        if (a[0] === "log") return "commit 9df848c (HEAD)\nAuthor: oubento\n    Oubento guest OS";
-        if (a[0] === "clone") return "Cloning into '" + (a[1] || "repo") + "'...\ndone.";
-        return "usage: git status|log|clone";
-      },
-      ssh: (a) => `ssh: connect to host ${a[0] || "host"} port 22: Connection refused (guest shell — no remote SSH daemon)`,
-      bash: () => "already in oush (bash-compatible guest shell)",
-      sh: () => commands.bash(),
+    const hooks = {
+      hist,
+      onCwd: prompt,
+      clear: () => { out.innerHTML = ""; },
       exit: () => {
-        if (AUTH.session === "root") {
-          AUTH.drop();
-          env.USER = "oubento";
-          env.HOME = "/home/oubento";
-          cwd = "/home/oubento";
-          prompt();
-          renderStatus();
-          return "logout";
-        }
         const w = OS.state.windows.find((x) => x.app === "terminal" && x.id === OS.state.active);
         if (w) closeWin(w.id);
-        return "";
       },
     };
 
-    async function runInner(cmd, args) {
-      const fn = resolveCmd(cmd);
-      if (!fn) return cmd + ": command not found";
-      return await fn(args);
-    }
-
-    function resolveCmd(cmd) {
-      if (!cmd) return null;
-      if (commands[cmd]) return commands[cmd];
-      const low = cmd.toLowerCase();
-      if (commands[low]) return commands[low];
-      const hit = Object.keys(commands).find((k) => k.toLowerCase() === low);
-      return hit ? commands[hit] : null;
-    }
-
-    function suggest(cmd) {
-      const low = cmd.toLowerCase();
-      const keys = Object.keys(commands);
-      const start = keys.filter((k) => k.startsWith(low) || low.startsWith(k.slice(0, 3)));
-      if (start.length) return "Did you mean: " + start.slice(0, 5).join(", ") + " ?";
-      return "Try: help   ping HOST   python3 -c 'print(2+2)'   pkg install python";
-    }
-
-    function resolve(p) {
-      if (!p) return cwd;
-      if (p === "~") return env.HOME;
-      if (p.startsWith("~/")) return env.HOME + p.slice(1);
-      if (p.startsWith("/")) return VFS.norm(p);
-      return VFS.norm(cwd + "/" + p);
-    }
-
     async function run(line) {
-      const parts = line.trim().split(/\s+/);
-      const cmd = parts[0];
-      const args = parts.slice(1);
-      if (!cmd) return;
+      if (!line.trim()) return;
       print(`${pr.textContent} ${line}`);
-      const fn = resolveCmd(cmd);
-      if (!fn) {
-        print(`${cmd}: command not found`, "err");
-        print(suggest(cmd));
-        return;
-      }
       try {
-        const res = await fn(args);
-        if (res) print(res);
+        const res = await KERNEL.execLine(line, sess, hooks);
+        if (res) print(res, String(res).includes("not found") || String(res).startsWith("E:") ? "err" : "");
       } catch (e) {
         print(String(e.message || e), "err");
       }
+      prompt();
     }
 
     input.addEventListener("keydown", async (e) => {
@@ -637,7 +215,8 @@ APPS.terminal = {
         input.value = hist[++hi] || "";
       } else if (e.key === "Tab") {
         e.preventDefault();
-        const names = Object.keys(commands).concat(VFS.list(cwd).map((i) => i.name));
+        const names = ["help", "ls", "cd", "pwd", "cat", "apt", "pkg", "ping", "python3", "neofetch", "sudo"]
+          .concat(VFS.list(sess.cwd).map((i) => i.name));
         const cur = input.value.split(/\s+/).pop();
         const hit = names.find((n) => n.startsWith(cur));
         if (hit) input.value = input.value.replace(/[^\s]*$/, hit);
@@ -812,15 +391,17 @@ APPS.settings = {
       } else if (p === "about") {
         page(
           t("about"),
-          `<div class="hero-about"><h2>Oubento</h2><div>Ubuntu-compatible mobile OS</div></div>
+          `<div class="hero-about"><h2>Oubento</h2><div>${t("standaloneNote")}</div></div>
            <div class="card">
              <div class="row"><div class="grow">Distro</div>${currentDistro().name}</div>
              <div class="row"><div class="grow">Version</div>${currentDistro().version}</div>
              <div class="row"><div class="grow">Codename</div>${currentDistro().codename}</div>
              <div class="row"><div class="grow">${t("desktopEnv")}</div>${currentDistro().session}</div>
-             <div class="row"><div class="grow">Kernel</div>6.8.0-oubento</div>
+             <div class="row"><div class="grow">Guest kernel</div>${KERNEL.version}</div>
+             <div class="row"><div class="grow">Kind</div>self-contained guest OS</div>
              <div class="row"><div class="grow">Device</div>${navigator.userAgent.split("(")[1]?.split(")")[0] || "Phone"}</div>
-           </div>`
+           </div>
+           <p class="pad muted">${t("authScope")}</p>`
         );
       }
     };
@@ -1662,7 +1243,7 @@ APPS.help = {
         <div class="row"><div class="grow">${t("g3")}</div></div>
       </div>
       <h3>Terminal</h3>
-      <p><span class="kbd">neofetch</span> <span class="kbd">apt install weather</span> <span class="kbd">ls</span></p>
+      <p><span class="kbd">neofetch</span> <span class="kbd">Ping HOST</span> <span class="kbd">pkg install python</span> <span class="kbd">ls /</span></p>
     </div>`;
   },
 };

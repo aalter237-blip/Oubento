@@ -18,8 +18,8 @@
   --bar: 34px;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
-  --font: "Ubuntu", "Noto Sans Arabic", "Segoe UI", sans-serif;
-  --mono: "Ubuntu Mono", "Noto Sans Arabic", ui-monospace, monospace;
+  --font: "Ubuntu", "Noto Sans Arabic", "Segoe UI", "Tahoma", sans-serif;
+  --mono: "Ubuntu Mono", "Noto Sans Arabic", ui-monospace, "Courier New", monospace;
   color-scheme: light;
 }
 

@@ -178,7 +178,7 @@ def build_manifest() -> bytes:
     package_name_id = p.add("package")
 
     pkg = p.add("os.oubento")
-    ver_name = p.add("24.04.3")
+    ver_name = p.add("24.04.4")
     act_name = p.add("com.nicron.webview.MainActivity")
     app_label = p.add("Oubento")
     perm_net = p.add("android.permission.INTERNET")
@@ -213,7 +213,7 @@ def build_manifest() -> bytes:
             manifest,
             [
                 (0xFFFFFFFF, package_name_id, pkg, TYPE_STRING, pkg),
-                attr_android("versionCode", TYPE_INT_DEC, 4),
+                attr_android("versionCode", TYPE_INT_DEC, 5),
                 attr_android("versionName", TYPE_STRING, ver_name, ver_name),
             ],
         )

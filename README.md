@@ -1,8 +1,10 @@
 # Oubento
 
-نظام مكتبي للهاتف مستوحى من أوبنتو وتوزيعات لينكس (GNOME، Plasma، Xfce، Unity…).
+نظام ضيف مكتمل قائم بذاته داخل تطبيق أندرويد، مستوحى من أوبنتو.
 
-يعمل كتطبيق مستقل بملء الشاشة. **ليس** نواة لينكس على الهاتف، و**ليس** روت لأندرويد.
+يعمل بملء الشاشة دون كروم. **ليس** نواة لينكس على عتاد الهاتف، و**ليس** روت لأندرويد.
+
+داخله يوجد: نواة ضيف، نظام ملفات FHS، خدمات، مدير حزم، طرفية، وسطح مكتب.
 
 المستودع: https://github.com/aalter237-blip/Oubento  
 الفرع: `arena/01a03395-oubento`
@@ -18,55 +20,32 @@ python3 -m http.server 8080 --bind 0.0.0.0
 افتح `http://localhost:8080` ثم اضغط دخول.  
 كلمة المرور الاختيارية: `ubuntu`
 
-## الطرفية (جاهزة)
-
-افتح تطبيق الطرفية وجرّب:
+## الطرفية
 
 ```
 help
-whoami
-id
 neofetch
-lsb_release
 ls /
-ls ~
+cat /etc/os-release
+cat /proc/version
 Ping www.facebook.com
-pkg install python
+sudo apt install python3
 python3 -c "print(2+2)"
-sudo -i
-# كلمة ubuntu
-id
-apt list
-exit
+echo hi | grep h
+systemctl status
 ```
 
-الأوامر لا تفرّق بين الأحرف الكبيرة والصغيرة (`Ping` = `ping`).  
-أوامر أخرى: `cd` `pwd` `cat` `mkdir` `rm` `nano` `vim` `apt` `pkg` `dnf` `pacman` `pip` `node` `git` `tree` `find` `df` `ps` `nslookup`
+الأوامر لا تفرّق بين الأحرف الكبيرة والصغيرة. أنابيب `|` وإعادة توجيه `>` مدعومة.
 
 ## روت داخل أوبنتو فقط
 
 - حسابان: `oubento` (sudo) و `root` (uid 0)
 - كلمة المرور: `ubuntu`
-- `sudo -i` أو `su -` — الموجّه يصبح `#`
-- الملفات: **فتح كمسؤول** لمسارات مثل `/etc`
-
-## التوزيعات
-
-Ubuntu · Kubuntu · Xubuntu · Lubuntu · Ubuntu MATE · Ubuntu Budgie · Ubuntu Unity · Edubuntu · Debian · Linux Mint · Pop!_OS · elementary OS · Zorin OS · Fedora · Manjaro · Arch · openSUSE · AlmaLinux
-
-كل جلسة تأتي ببرامجها (دولفين/كيت/ديسكفر، ثونار، نيمو/تايم شفت، dnfdragora…).
+- لا يؤثر على أندرويد
 
 ## ملف APK
 
-الملف الجاهز للتثبيت:
-
-**[dist/Oubento.apk](dist/Oubento.apk)** — حزمة `os.oubento` (debug، targetSdk 29)
-
-1. انسخه إلى الهاتف
-2. اسمح بتثبيت من مصادر غير معروفة
-3. افتح الملف وثبّت
-
-إعادة البناء بدون Android Studio:
+**[dist/Oubento.apk](dist/Oubento.apk)** — `os.oubento` 24.04.4
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install cryptography

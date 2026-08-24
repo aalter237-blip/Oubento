@@ -1,17 +1,12 @@
 function renderBoot() {
   const el = document.getElementById("boot");
+  const lines = (window.KERNEL && KERNEL.bootMessages ? KERNEL.bootMessages() : []).join("<br>");
   el.innerHTML = `
     <img src="assets/branding/boot-mascot.png" alt="">
     <h1>${currentDistro().name}</h1>
     <p>${t("boot")}</p>
     <div class="boot-bar"><i></i></div>
-    <div class="boot-log">
-      [  0.000001] oubento-kernel 6.8.0-phone SMP PREEMPT<br>
-      [  0.214220] Initramfs unpacking... ok<br>
-      [  0.881002] Starting GNOME Session / Lomiri shell<br>
-      [  1.402110] NetworkManager is running<br>
-      [  1.990001] Welcome to ${currentDistro().name} ${OS.version} · ${currentDistro().session}
-    </div>`;
+    <div class="boot-log">${lines}</div>`;
 }
 
 function renderLock() {
@@ -550,6 +545,7 @@ function isStandalone() {
 async function startOS() {
   loadSettings();
   await VFS.init();
+  if (window.KERNEL && KERNEL.boot) KERNEL.boot();
   applyDistro(OS.settings.distro || "ubuntu", { persist: false, rerender: false });
   applyChrome();
   renderBoot();
