@@ -97,7 +97,8 @@ def build_string_pool(strings: list[str]) -> bytes:
 
 
 def chunk(typ: int, header_size: int, body: bytes) -> bytes:
-    return u16(typ) + u16(header_size) + u32(header_size + len(body)) + body
+    # ResChunk_header.size is the full chunk including the 8-byte header.
+    return u16(typ) + u16(header_size) + u32(8 + len(body)) + body
 
 
 def res_value(typ: int, data: int) -> bytes:
@@ -274,8 +275,7 @@ def build_manifest() -> bytes:
                 attr_android("exported", TYPE_INT_BOOLEAN, 1),
                 attr_android("hardwareAccelerated", TYPE_INT_BOOLEAN, 1),
                 attr_android("configChanges", TYPE_INT_HEX, 0x04B0),
-                attr_android("screenOrientation", TYPE_INT_DEC, 1),  # portrait
-                attr_android("theme", TYPE_REFERENCE, 0x01030007),  # Theme.NoTitleBar.Fullscreen
+                attr_android("screenOrientation", TYPE_INT_DEC, 1),
                 attr_android("label", TYPE_STRING, app_label, app_label),
             ],
         )
@@ -317,14 +317,24 @@ def collect_www() -> list[tuple[str, bytes]]:
     return files
 
 
+def empty_arsc() -> bytes:
+    pool_body = u32(0) + u32(0) + u32(0) + u32(0x1C) + u32(0)
+    pool = u16(0x0001) + u16(0x1C) + u32(8 + len(pool_body)) + pool_body
+    return u16(0x0002) + u16(0x0C) + u32(12 + len(pool)) + u32(0) + pool
+
+
 def pack_unsigned(manifest: bytes, dex: bytes, www_files: list[tuple[str, bytes]], dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()
+    arsc = empty_arsc()
     with zipfile.ZipFile(dest, "w") as zf:
         info = zipfile.ZipInfo("AndroidManifest.xml")
-        info.compress_type = zipfile.ZIP_DEFLATED
+        info.compress_type = zipfile.ZIP_STORED
         zf.writestr(info, manifest)
+        info = zipfile.ZipInfo("resources.arsc")
+        info.compress_type = zipfile.ZIP_STORED
+        zf.writestr(info, arsc)
         info = zipfile.ZipInfo("classes.dex")
         info.compress_type = zipfile.ZIP_STORED
         zf.writestr(info, dex)
@@ -416,6 +426,91 @@ def sign_v1(apk_path: Path) -> None:
     tmp.replace(apk_path)
 
 
+def _lp(data: bytes) -> bytes:
+    return struct.pack("<I", len(data)) + data
+
+
+def _zip_eocd(buf: bytes) -> int:
+    for i in range(len(buf) - 22, max(-1, len(buf) - 22 - 65535), -1):
+        if buf[i : i + 4] == b"PK\x05\x06":
+            return i
+    raise ValueError("EOCD not found")
+
+
+def _chunked_sha256(parts: list[bytes]) -> bytes:
+    chunks = []
+    for part in parts:
+        off = 0
+        while off < len(part):
+            piece = part[off : off + 1024 * 1024]
+            h = hashlib.sha256()
+            h.update(b"\xa5")
+            h.update(struct.pack("<I", len(piece)))
+            h.update(piece)
+            chunks.append(h.digest())
+            off += 1024 * 1024
+    h = hashlib.sha256()
+    h.update(b"\x5a")
+    h.update(struct.pack("<I", len(chunks)))
+    for c in chunks:
+        h.update(c)
+    return h.digest()
+
+
+def sign_v2(apk_path: Path) -> None:
+    """APK Signature Scheme v2 so modern Android will parse the package."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Oubento")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=3650))
+        .sign(key, hashes.SHA256())
+    )
+    cert_der = cert.public_bytes(serialization.Encoding.DER)
+    pub_der = key.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    data = apk_path.read_bytes()
+    eocd = _zip_eocd(data)
+    cd_off = struct.unpack_from("<I", data, eocd + 16)[0]
+    cd = data[cd_off:eocd]
+    eocd_bytes = bytearray(data[eocd:])
+    before = data[:cd_off]
+    digest = _chunked_sha256([before, cd, bytes(eocd_bytes)])
+
+    alg = 0x0103  # RSASSA-PKCS1-v1_5 with SHA-256
+    digest_pair = struct.pack("<I", alg) + digest
+    signed_data = _lp(_lp(digest_pair)) + _lp(_lp(cert_der)) + _lp(b"")
+    signature = key.sign(signed_data, padding.PKCS1v15(), hashes.SHA256())
+    sig_pair = struct.pack("<I", alg) + signature
+    signer = _lp(signed_data) + _lp(_lp(sig_pair)) + _lp(pub_der)
+    v2_block = _lp(_lp(signer))
+
+    pair = struct.pack("<I", 0x7109871A) + v2_block
+    pair_lp = struct.pack("<Q", len(pair)) + pair
+    # size field excludes itself but includes trailing size+magic
+    magic = b"APK Sig Block 42"
+    block_wo_first = pair_lp + struct.pack("<Q", 0) + magic
+    size = len(block_wo_first)
+    block = struct.pack("<Q", size) + pair_lp + struct.pack("<Q", size) + magic
+
+    new_cd = cd_off + len(block)
+    struct.pack_into("<I", eocd_bytes, 16, new_cd)
+    apk_path.write_bytes(before + block + cd + bytes(eocd_bytes))
+
+
 def main() -> None:
     if not TEMPLATE.exists():
         raise SystemExit(f"missing template {TEMPLATE} — run: cd /tmp && npm pack nitron && tar xf")
@@ -428,8 +523,9 @@ def main() -> None:
     www = collect_www()
     print("files", len(www))
     pack_unsigned(manifest, dex, www, OUT)
-    print("signing (JAR v1, targetSdk 29) …")
+    print("signing v1 + v2 …")
     sign_v1(OUT)
+    sign_v2(OUT)
     print("APK", OUT, OUT.stat().st_size, "bytes")
 
 
