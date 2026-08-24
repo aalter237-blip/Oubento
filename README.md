@@ -52,11 +52,12 @@ Ubuntu · Kubuntu · Xubuntu · Lubuntu · Ubuntu MATE · Ubuntu Budgie · Ubunt
 
 كل جلسة تأتي ببرامجها (دولفين/كيت/ديسكفر، ثونار، نيمو/تايم شفت، dnfdragora…).
 
-## بناء APK على جهازك
+## ملف APK
 
-```bash
-bash tools/sync-android-assets.sh
-# افتح android/ في Android Studio → Build APK
-```
+لا يمكن بناء APK داخل بيئة التطوير هذه (لا Java/SDK). يُبنى على GitHub Actions:
 
-التفاصيل: `android/README.md`
+https://github.com/aalter237-blip/Oubento/actions
+
+Actions → **Build APK** → حمّل **Oubento-apk**
+
+أو على جهازك: `android/README.md`
