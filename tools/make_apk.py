@@ -491,11 +491,11 @@ def sign_v2(apk_path: Path) -> None:
     digest = _chunked_sha256([before, cd, bytes(eocd_bytes)])
 
     alg = 0x0103  # RSASSA-PKCS1-v1_5 with SHA-256
-    digest_pair = struct.pack("<I", alg) + digest
-    signed_data = _lp(_lp(digest_pair)) + _lp(_lp(cert_der)) + _lp(b"")
+    digest_item = struct.pack("<I", alg) + _lp(digest)
+    signed_data = _lp(_lp(digest_item)) + _lp(_lp(cert_der)) + _lp(b"")
     signature = key.sign(signed_data, padding.PKCS1v15(), hashes.SHA256())
-    sig_pair = struct.pack("<I", alg) + signature
-    signer = _lp(signed_data) + _lp(_lp(sig_pair)) + _lp(pub_der)
+    sig_item = struct.pack("<I", alg) + _lp(signature)
+    signer = _lp(signed_data) + _lp(_lp(sig_item)) + _lp(pub_der)
     v2_block = _lp(_lp(signer))
 
     pair = struct.pack("<I", 0x7109871A) + v2_block
