@@ -1,1 +1,74 @@
 # Oubento
+
+نظام مكتبي للهاتف مستوحى من أوبنتو وتوزيعات لينكس (GNOME، Plasma، Xfce، Unity…).
+
+يعمل كتطبيق مستقل بملء الشاشة. **ليس** نواة لينكس على الهاتف، و**ليس** روت لأندرويد.
+
+المستودع: https://github.com/aalter237-blip/Oubento  
+الفرع: `arena/01a03395-oubento`
+
+## التجربة السريعة
+
+```bash
+git clone -b arena/01a03395-oubento https://github.com/aalter237-blip/Oubento.git
+cd Oubento
+python3 -m http.server 8080 --bind 0.0.0.0
+```
+
+افتح `http://localhost:8080` ثم اضغط دخول.  
+كلمة المرور الاختيارية: `ubuntu`
+
+## الطرفية (جاهزة)
+
+افتح تطبيق الطرفية وجرّب:
+
+```
+help
+whoami
+id
+neofetch
+lsb_release
+ls /
+ls ~
+Ping www.facebook.com
+pkg install python
+python3 -c "print(2+2)"
+sudo -i
+# كلمة ubuntu
+id
+apt list
+exit
+```
+
+الأوامر لا تفرّق بين الأحرف الكبيرة والصغيرة (`Ping` = `ping`).  
+أوامر أخرى: `cd` `pwd` `cat` `mkdir` `rm` `nano` `vim` `apt` `pkg` `dnf` `pacman` `pip` `node` `git` `tree` `find` `df` `ps` `nslookup`
+
+## روت داخل أوبنتو فقط
+
+- حسابان: `oubento` (sudo) و `root` (uid 0)
+- كلمة المرور: `ubuntu`
+- `sudo -i` أو `su -` — الموجّه يصبح `#`
+- الملفات: **فتح كمسؤول** لمسارات مثل `/etc`
+
+## التوزيعات
+
+Ubuntu · Kubuntu · Xubuntu · Lubuntu · Ubuntu MATE · Ubuntu Budgie · Ubuntu Unity · Edubuntu · Debian · Linux Mint · Pop!_OS · elementary OS · Zorin OS · Fedora · Manjaro · Arch · openSUSE · AlmaLinux
+
+كل جلسة تأتي ببرامجها (دولفين/كيت/ديسكفر، ثونار، نيمو/تايم شفت، dnfdragora…).
+
+## ملف APK
+
+الملف الجاهز للتثبيت:
+
+**[dist/Oubento.apk](dist/Oubento.apk)** — حزمة `os.oubento` (debug، targetSdk 29)
+
+1. انسخه إلى الهاتف
+2. اسمح بتثبيت من مصادر غير معروفة
+3. افتح الملف وثبّت
+
+إعادة البناء بدون Android Studio:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install cryptography
+.venv/bin/python tools/make_apk.py
+```
