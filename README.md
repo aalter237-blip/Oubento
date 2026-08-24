@@ -54,10 +54,17 @@ Ubuntu · Kubuntu · Xubuntu · Lubuntu · Ubuntu MATE · Ubuntu Budgie · Ubunt
 
 ## ملف APK
 
-لا يمكن بناء APK داخل بيئة التطوير هذه (لا Java/SDK). يُبنى على GitHub Actions:
+الملف الجاهز للتثبيت:
 
-https://github.com/aalter237-blip/Oubento/actions
+**[dist/Oubento.apk](dist/Oubento.apk)** — حزمة `os.oubento` (debug، targetSdk 29)
 
-Actions → **Build APK** → حمّل **Oubento-apk**
+1. انسخه إلى الهاتف
+2. اسمح بتثبيت من مصادر غير معروفة
+3. افتح الملف وثبّت
 
-أو على جهازك: `android/README.md`
+إعادة البناء بدون Android Studio:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install cryptography
+.venv/bin/python tools/make_apk.py
+```
