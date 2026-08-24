@@ -1,7 +1,7 @@
 {
   "name": "Oubento",
   "packageId": "os.oubento",
-  "version": "24.04.2",
+  "version": "24.04.3",
   "entry": "www/index.html",
   "orientation": "portrait",
   "statusBar": false,

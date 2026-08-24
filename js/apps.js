@@ -11,6 +11,45 @@ function storeSet(k, v) {
   localStorage.setItem("oubento-" + k, JSON.stringify(v));
 }
 
+function pyRun(args) {
+  const joined = args.join(" ");
+  let code = "";
+  if (args[0] === "-c") code = args.slice(1).join(" ").replace(/^['"]|['"]$/g, "");
+  else if (args[0] && !args[0].startsWith("-")) {
+    try {
+      code = String(VFS.read(args[0].startsWith("/") ? args[0] : "/home/oubento/" + args[0]));
+    } catch {
+      return "python: can't open file '" + args[0] + "': No such file";
+    }
+  } else {
+    return [
+      "Python 3.12.3 (Oubento guest)",
+      "Examples:",
+      "  python3 -c \"print(2+2)\"",
+      "  python3 -c \"import math; print(math.sqrt(16))\"",
+      "  python3 script.py",
+    ].join("\n");
+  }
+  try {
+    const out = [];
+    const src = code
+      .replace(/#.*$/gm, "")
+      .replace(/\bTrue\b/g, "true")
+      .replace(/\bFalse\b/g, "false")
+      .replace(/\bNone\b/g, "null")
+      .replace(/\belif\b/g, "else if")
+      .replace(/\bprint\s*\(/g, "__p(");
+    const math = Math;
+    const random = { random: Math.random, randint: (a, b) => a + Math.floor(Math.random() * (b - a + 1)) };
+    const sys = { version: "3.12.3", platform: "linux" };
+    const __p = (...x) => out.push(x.map(String).join(" "));
+    Function("math", "random", "sys", "__p", `"use strict";\n${src}`)(math, random, sys, __p);
+    return out.join("\n") || "";
+  } catch (e) {
+    return "Traceback (most recent call last):\n  File \"<stdin>\", line 1\n" + e.message;
+  }
+}
+
 /* ---------------- Files ---------------- */
 APPS.files = {
   mount(el, ctx) {
@@ -186,7 +225,7 @@ APPS.terminal = {
 
     const commands = {
       help: () =>
-        "Available: ls cd pwd cat echo mkdir rm touch nano date whoami uname hostname clear history neofetch apt free df ps tree find grep head tail wc reboot shutdown lsb_release uname fortune cowsay man curl wget open weather calc htop top ip env export exit",
+        "ls cd pwd cat echo mkdir rm touch nano vim date whoami id uname hostname clear history neofetch\napt pkg dnf pacman yum pip python python3 node ping nslookup curl wget\nfree df ps top htop tree find grep head tail wc which man ip ifconfig\nsudo su reboot shutdown lsb_release fortune cowsay calc git ssh env export exit",
       ls: (a) => {
         const p = a[0] && !a[0].startsWith("-") ? resolve(a[0]) : cwd;
         return VFS.list(p)
@@ -273,13 +312,20 @@ APPS.terminal = {
         if (a[0] === "update") return "Hit:1 oubento-repo noble InRelease\nReading package lists... Done";
         if (a[0] === "upgrade") return "0 upgraded, 0 newly installed.";
         if (a[0] === "install") {
-          const id = a[1];
+          const id = (a[1] || "").toLowerCase();
+          const pkgs = storeGet("syspkgs", ["bash", "coreutils", "neofetch"]);
+          const known = ["python", "python3", "pip", "node", "git", "vim", "nano", "curl", "wget", "htop", "ping", "openssh"];
           if (id && CATALOG.some((c) => c.id === id)) {
             if (!isInstalled(id)) {
               OS.settings.installed.push(id);
               saveSettings();
             }
             return `Setting up ${id} ...\nProcessing triggers ... done.`;
+          }
+          if (known.includes(id) || id) {
+            if (!pkgs.includes(id)) pkgs.push(id);
+            storeSet("syspkgs", pkgs);
+            return `Get:1 oubento-repo ${id}\nUnpacking ${id} ...\nSetting up ${id} (guest) ...\n${id} is ready. Try: ${id === "python" || id === "python3" ? "python3 -c 'print(2+2)'" : id}`;
           }
           return "E: Unable to locate package " + (a[1] || "");
         }
@@ -447,6 +493,69 @@ APPS.terminal = {
           return "NaN";
         }
       },
+      pkg: (a) => commands.apt(a),
+      yum: (a) => commands.apt(a),
+      apk: (a) => commands.apt(a[0] === "add" ? ["install", a[1]] : a),
+      pip: (a) => {
+        if (a[0] === "install") return `Collecting ${a[1] || "package"}\nInstalling collected packages: ${a[1]}\nSuccessfully installed ${a[1]}-guest`;
+        if (a[0] === "list") return "pip 24.0 from /usr/lib/python3/dist-packages";
+        return "Usage: pip install <name>";
+      },
+      ping: async (a) => {
+        const host = (a.find((x) => !x.startsWith("-")) || "1.1.1.1").replace(/^https?:\/\//, "").split("/")[0];
+        const n = 4;
+        const lines = [`PING ${host} (${host}) 56(84) bytes of data.`];
+        for (let i = 0; i < n; i++) {
+          const t0 = performance.now();
+          try {
+            await fetch("https://" + host, { mode: "no-cors", cache: "no-store" });
+            lines.push(`64 bytes from ${host}: icmp_seq=${i + 1} ttl=56 time=${(performance.now() - t0).toFixed(1)} ms`);
+          } catch {
+            lines.push(`From oubento: icmp_seq=${i + 1} Destination Host Unreachable`);
+          }
+        }
+        lines.push(`--- ${host} ping statistics ---`, `${n} packets transmitted, ${n} received`);
+        return lines.join("\n");
+      },
+      nslookup: async (a) => {
+        const host = a[0] || "ubuntu.com";
+        try {
+          const r = await fetch("https://dns.google/resolve?name=" + encodeURIComponent(host) + "&type=A");
+          const j = await r.json();
+          const ans = (j.Answer || []).map((x) => x.data).join("\n");
+          return `Server:\tdns.google\nName:\t${host}\n${ans || "NXDOMAIN"}`;
+        } catch {
+          return "nslookup: failed";
+        }
+      },
+      python: (a) => pyRun(a),
+      python3: (a) => commands.python(a),
+      py: (a) => commands.python(a),
+      node: (a) => {
+        const code = a[0] === "-e" || a[0] === "-c" ? a.slice(1).join(" ") : a.join(" ");
+        if (!code) return "Welcome to Node.js 20 (guest).\nUse: node -e 'console.log(1+1)'";
+        try {
+          const logs = [];
+          const consoleFake = { log: (...x) => logs.push(x.join(" ")) };
+          Function("console", `"use strict";${code}`)(consoleFake);
+          return logs.join("\n") || "undefined";
+        } catch (e) {
+          return String(e.message);
+        }
+      },
+      which: (a) => (a[0] && (commands[a[0].toLowerCase()] || commands[a[0]]) ? "/usr/bin/" + a[0].toLowerCase() : ""),
+      ifconfig: () => commands.ip(),
+      vim: (a) => commands.nano(a),
+      vi: (a) => commands.nano(a),
+      git: (a) => {
+        if (a[0] === "status") return "On branch guest\nnothing to commit, working tree clean";
+        if (a[0] === "log") return "commit 9df848c (HEAD)\nAuthor: oubento\n    Oubento guest OS";
+        if (a[0] === "clone") return "Cloning into '" + (a[1] || "repo") + "'...\ndone.";
+        return "usage: git status|log|clone";
+      },
+      ssh: (a) => `ssh: connect to host ${a[0] || "host"} port 22: Connection refused (guest shell — no remote SSH daemon)`,
+      bash: () => "already in oush (bash-compatible guest shell)",
+      sh: () => commands.bash(),
       exit: () => {
         if (AUTH.session === "root") {
           AUTH.drop();
@@ -464,9 +573,26 @@ APPS.terminal = {
     };
 
     async function runInner(cmd, args) {
-      const fn = commands[cmd];
+      const fn = resolveCmd(cmd);
       if (!fn) return cmd + ": command not found";
       return await fn(args);
+    }
+
+    function resolveCmd(cmd) {
+      if (!cmd) return null;
+      if (commands[cmd]) return commands[cmd];
+      const low = cmd.toLowerCase();
+      if (commands[low]) return commands[low];
+      const hit = Object.keys(commands).find((k) => k.toLowerCase() === low);
+      return hit ? commands[hit] : null;
+    }
+
+    function suggest(cmd) {
+      const low = cmd.toLowerCase();
+      const keys = Object.keys(commands);
+      const start = keys.filter((k) => k.startsWith(low) || low.startsWith(k.slice(0, 3)));
+      if (start.length) return "Did you mean: " + start.slice(0, 5).join(", ") + " ?";
+      return "Try: help   ping HOST   python3 -c 'print(2+2)'   pkg install python";
     }
 
     function resolve(p) {
@@ -483,9 +609,10 @@ APPS.terminal = {
       const args = parts.slice(1);
       if (!cmd) return;
       print(`${pr.textContent} ${line}`);
-      const fn = commands[cmd];
+      const fn = resolveCmd(cmd);
       if (!fn) {
         print(`${cmd}: command not found`, "err");
+        print(suggest(cmd));
         return;
       }
       try {

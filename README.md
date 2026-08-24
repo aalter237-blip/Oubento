@@ -30,6 +30,9 @@ neofetch
 lsb_release
 ls /
 ls ~
+Ping www.facebook.com
+pkg install python
+python3 -c "print(2+2)"
 sudo -i
 # كلمة ubuntu
 id
@@ -37,7 +40,8 @@ apt list
 exit
 ```
 
-أوامر أخرى: `cd` `pwd` `cat` `mkdir` `rm` `nano` `apt` `dnf` `pacman` `tree` `find` `df` `ps`
+الأوامر لا تفرّق بين الأحرف الكبيرة والصغيرة (`Ping` = `ping`).  
+أوامر أخرى: `cd` `pwd` `cat` `mkdir` `rm` `nano` `vim` `apt` `pkg` `dnf` `pacman` `pip` `node` `git` `tree` `find` `df` `ps` `nslookup`
 
 ## روت داخل أوبنتو فقط
 
