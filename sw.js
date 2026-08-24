@@ -1,4 +1,4 @@
-const CACHE = "oubento-v2";
+const CACHE = "oubento-v3";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -12,6 +12,7 @@ const PRECACHE = [
   "./js/distros.js",
   "./js/shell.js",
   "./js/apps.js",
+  "./js/apps-native.js",
   "./assets/branding/icon-512.png",
   "./assets/branding/icon-192.png",
   "./assets/branding/boot-mascot.png",

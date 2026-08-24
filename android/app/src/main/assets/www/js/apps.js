@@ -1584,7 +1584,7 @@ APPS.store = {
   mount(el, ctx) {
     const paint = (q = "") => {
       const list = CATALOG.filter((a) => t(a.id).includes(q) || a.id.includes(q.toLowerCase()));
-      el.innerHTML = `<div class="store-hero"><h2 style="margin:0">${t("store")}</h2><div>Ubuntu Software · ${CATALOG.length} apps</div></div>
+      el.innerHTML = `<div class="store-hero"><h2 style="margin:0">${currentDistro().name}</h2><div>${currentDistro().pkg} · ${t("store")} · ${list.length}</div></div>
         <div class="toolbar"><input id="q" placeholder="${t("search")}" value="${q}"></div>
         ${list
           .map((a) => {

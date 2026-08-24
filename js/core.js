@@ -127,6 +127,18 @@ function h(html) {
 }
 
 function svgIcon(name) {
+  const alias = {
+    nautilus: "files", "pantheon-files": "files", "cosmic-files": "files", caja: "files", nemo: "files", pcmanfm: "files",
+    "gnome-terminal": "terminal", konsole: "terminal", "xfce4-terminal": "terminal", qterminal: "terminal",
+    "mate-terminal": "terminal", "pantheon-terminal": "terminal", "cosmic-term": "terminal",
+    gedit: "editor", kwrite: "editor", mousepad: "editor", featherpad: "editor", pluma: "editor", xed: "editor",
+    eog: "gallery", gwenview: "gallery", ristretto: "gallery", lximage: "gallery", pix: "gallery", photos: "gallery",
+    parole: "videos", evince: "writer", okular: "writer", atril: "writer", kcalc: "calculator",
+    ksysguard: "monitor", "gnome-system-monitor": "monitor", software: "store", "gnome-software": "store",
+    synaptic: "store", mintinstall: "store", "pop-shop": "store", appcenter: "store", pamac: "store",
+    dnfdragora: "store", yast: "store", epiphany: "browser", firefox: "browser", ark: "files", engrampa: "files",
+  };
+  name = alias[name] || name;
   const shapes = {
     folder: `<rect x="3" y="8" width="26" height="18" rx="3" fill="#e8b84a"/><path d="M3 10a3 3 0 0 1 3-3h7l3 3h13a3 3 0 0 1 3 3v2H3z" fill="#f3d27a"/>`,
     files: `<rect width="32" height="32" rx="8" fill="#3584e4"/><path d="M9 8h9l5 5v11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z" fill="#fff"/><path d="M18 8v5h5" fill="#cfe3ff"/>`,
@@ -170,6 +182,12 @@ function svgIcon(name) {
     home: `<rect width="32" height="32" rx="8" fill="#e95420"/><path d="M6 16 L16 8 L26 16 V25 H6 Z" fill="#fff"/>`,
     image: `<rect x="4" y="6" width="24" height="20" rx="3" fill="#c061cb"/>`,
     file: `<path d="M9 5h9l6 6v16H9z" fill="#deddda"/><path d="M18 5v6h6" fill="#c0bfbc"/>`,
+    nautilus: `<rect width="32" height="32" rx="8" fill="#3584e4"/><path d="M9 8h9l5 5v11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z" fill="#fff"/>`,
+    dolphin: `<rect width="32" height="32" rx="8" fill="#1d99f3"/><path d="M6 12h20v12H6z" fill="#fff"/><path d="M6 10h8l2 2h10v2H6z" fill="#93cee9"/>`,
+    thunar: `<rect width="32" height="32" rx="8" fill="#0044aa"/><rect x="6" y="10" width="20" height="14" rx="2" fill="#e8b84a"/>`,
+    discover: `<rect width="32" height="32" rx="8" fill="#1d99f3"/><circle cx="16" cy="16" r="6" fill="none" stroke="#fff" stroke-width="2"/><path d="M21 21l4 4" stroke="#fff" stroke-width="2"/>`,
+    kate: `<rect width="32" height="32" rx="8" fill="#1d99f3"/><path d="M10 8v16M10 16l10-7M10 16l10 7" stroke="#fff" stroke-width="2"/>`,
+    timeshift: `<rect width="32" height="32" rx="8" fill="#26a269"/><circle cx="16" cy="16" r="8" fill="#fff"/><path d="M16 10v6l4 3" stroke="#26a269" stroke-width="2"/>`,
   };
   return `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">${shapes[name] || shapes.file}</svg>`;
 }

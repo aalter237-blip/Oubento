@@ -117,8 +117,8 @@ function renderStatus() {
 }
 
 function dockApps() {
-  const fav = ["browser", "files", "terminal", "root", "distros", "settings"];
-  return fav.filter(isInstalled);
+  const d = currentDistro();
+  return (d.dock || ["browser", "files", "terminal", "settings"]).filter((id) => APPS[id]);
 }
 
 function renderDock() {
