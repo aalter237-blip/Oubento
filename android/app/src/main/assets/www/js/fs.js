@@ -72,12 +72,18 @@ const VFS = (() => {
       "/home/oubento/Videos": dir(),
       "/home/oubento/Templates": dir(),
       "/home/oubento/Public": dir(),
-      "/usr": dir(),
-      "/usr/share": dir(),
-      "/etc": dir(),
-      "/tmp": dir(),
-      "/var": dir(),
-      "/var/log": dir(),
+      "/usr": dir({ owner: "root" }),
+      "/usr/bin": dir({ owner: "root" }),
+      "/usr/share": dir({ owner: "root" }),
+      "/bin": dir({ owner: "root" }),
+      "/sbin": dir({ owner: "root" }),
+      "/opt": dir({ owner: "root" }),
+      "/root": dir({ owner: "root", mode: 700 }),
+      "/etc": dir({ owner: "root" }),
+      "/tmp": dir({ owner: "oubento", mode: 1777 }),
+      "/var": dir({ owner: "root" }),
+      "/var/log": dir({ owner: "root" }),
+      "/proc": dir({ owner: "root" }),
       "/.trash": dir(),
     };
     mem["/etc/os-release"] = file(
@@ -106,6 +112,15 @@ const VFS = (() => {
     );
     mem["/var/log/syslog"] = file("boot: oubento kernel ready\nshell: gnome-session started\n");
     mem["/home/oubento/Pictures/README.txt"] = file("الصور الملتقطة ولقطات الشاشة تُحفظ هنا.\n");
+    mem["/root/.profile"] = file("# root shell\nexport HOME=/root\n", "text/plain");
+    mem["/etc/passwd"] = file("root:x:0:0:root:/root:/bin/bash\noubento:x:1000:1000:Oubento:/home/oubento:/bin/bash\n");
+    mem["/etc/group"] = file("root:x:0:\nsudo:x:27:oubento\noubento:x:1000:\n");
+    mem["/etc/sudoers"] = file("# Oubento virtual sudoers — guest OS only\nroot ALL=(ALL:ALL) ALL\n%sudo ALL=(ALL:ALL) ALL\noubento ALL=(ALL:ALL) ALL\n");
+    mem["/etc/hostname"] = file("oubento-phone\n");
+    mem["/proc/version"] = file("Linux version 6.8.0-oubento (guest) (gcc) PREEMPT\n");
+    Object.keys(mem).forEach((k) => {
+      if (!mem[k].owner) mem[k].owner = k.startsWith("/home/oubento") || k.startsWith("/tmp") || k.startsWith("/.trash") ? "oubento" : "root";
+    });
   }
 
   async function init() {
@@ -119,8 +134,11 @@ const VFS = (() => {
           g.onsuccess = () => resolve(g.result);
           g.onerror = () => resolve(null);
         });
-        if (saved && saved["/"]) mem = saved;
-        else {
+        if (saved && saved["/"]) {
+          mem = saved;
+          migrate();
+          await persist();
+        } else {
           seed();
           await persist();
         }
@@ -129,6 +147,37 @@ const VFS = (() => {
       }
     })();
     return ready;
+  }
+
+  function migrate() {
+    const extra = ["/root", "/bin", "/sbin", "/opt", "/usr/bin", "/proc"];
+    extra.forEach((p) => {
+      if (!mem[p]) mem[p] = { type: "dir", mtime: now(), owner: "root" };
+    });
+    Object.keys(mem).forEach((k) => {
+      if (!mem[k].owner) mem[k].owner = k.startsWith("/home/oubento") || k.startsWith("/tmp") || k.startsWith("/.trash") ? "oubento" : "root";
+    });
+    if (!mem["/etc/sudoers"]) {
+      mem["/etc/sudoers"] = { type: "file", content: "root ALL=(ALL:ALL) ALL\n%sudo ALL=(ALL:ALL) ALL\noubento ALL=(ALL:ALL) ALL\n", mime: "text/plain", owner: "root", mtime: now() };
+    }
+    if (!mem["/etc/passwd"]) {
+      mem["/etc/passwd"] = { type: "file", content: "root:x:0:0:root:/root:/bin/bash\noubento:x:1000:1000:Oubento:/home/oubento:/bin/bash\n", mime: "text/plain", owner: "root", mtime: now() };
+    }
+  }
+
+  function isSystem(p) {
+    p = norm(p);
+    if (p.startsWith("/home/oubento") || p.startsWith("/tmp") || p.startsWith("/.trash")) return false;
+    return p === "/" || p.startsWith("/etc") || p.startsWith("/usr") || p.startsWith("/var") || p.startsWith("/bin") || p.startsWith("/sbin") || p.startsWith("/root") || p.startsWith("/proc") || p.startsWith("/opt");
+  }
+
+  function canWrite(p) {
+    if (window.AUTH && AUTH.isRoot()) return true;
+    return !isSystem(p);
+  }
+
+  function assertWrite(p) {
+    if (!canWrite(p)) throw new Error("Permission denied (need root inside Oubento)");
   }
 
   function exists(p) {
@@ -152,15 +201,17 @@ const VFS = (() => {
 
   async function mkdir(p) {
     p = norm(p);
+    assertWrite(p);
     if (mem[p]) throw new Error("exists");
     const par = parent(p);
     if (!mem[par] || mem[par].type !== "dir") throw new Error("no parent");
-    mem[p] = { type: "dir", mtime: now() };
+    mem[p] = { type: "dir", mtime: now(), owner: AUTH && AUTH.isRoot() ? "root" : "oubento" };
     await persist();
   }
 
   async function write(p, content, mime = "text/plain") {
     p = norm(p);
+    assertWrite(p);
     const par = parent(p);
     if (!mem[par] || mem[par].type !== "dir") throw new Error("no parent");
     mem[p] = {
@@ -169,6 +220,7 @@ const VFS = (() => {
       mime,
       size: typeof content === "string" ? new Blob([content]).size : (content.size || 0),
       mtime: now(),
+      owner: AUTH && AUTH.isRoot() ? "root" : "oubento",
     };
     await persist();
     return mem[p];
@@ -182,6 +234,7 @@ const VFS = (() => {
 
   async function remove(p, { toTrash = true } = {}) {
     p = norm(p);
+    assertWrite(p);
     if (p === "/" || p === "/home" || p === "/home/oubento") throw new Error("protected");
     const keys = Object.keys(mem).filter((k) => k === p || k.startsWith(p + "/"));
     if (toTrash && !p.startsWith("/.trash")) {
@@ -197,6 +250,7 @@ const VFS = (() => {
 
   async function rename(p, nextName) {
     p = norm(p);
+    assertWrite(p);
     const dest = norm(parent(p) + "/" + nextName);
     if (mem[dest]) throw new Error("exists");
     const keys = Object.keys(mem).filter((k) => k === p || k.startsWith(p + "/"));

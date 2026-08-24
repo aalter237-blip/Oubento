@@ -8,6 +8,7 @@ const PRECACHE = [
   "./js/i18n.js",
   "./js/fs.js",
   "./js/core.js",
+  "./js/auth.js",
   "./js/distros.js",
   "./js/shell.js",
   "./js/apps.js",

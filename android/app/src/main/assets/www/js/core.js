@@ -28,7 +28,7 @@ const OS = {
       "music", "camera", "contacts", "messages", "editor", "writer",
       "calcSheet", "maps", "monitor", "todo", "mail", "code", "mines",
       "snake", "puzzle", "trash", "updater", "disks", "logs", "converter",
-      "flashlight", "videos", "recorder", "distros"
+      "flashlight", "videos", "recorder", "distros", "root"
     ],
     hidden: [],
   },
@@ -165,6 +165,8 @@ function svgIcon(name) {
     converter: `<rect width="32" height="32" rx="8" fill="#0d7377"/><path d="M10 12h12M18 8l4 4-4 4M22 20H10M14 16l-4 4 4 4" fill="none" stroke="#fff" stroke-width="2"/>`,
     flashlight: `<rect width="32" height="32" rx="8" fill="#f5c211"/><path d="M13 6h6v8l3 4v8H10v-8l3-4z" fill="#fff"/>`,
     about: `<rect width="32" height="32" rx="8" fill="#e95420"/><circle cx="16" cy="16" r="7" fill="#fff"/><circle cx="16" cy="16" r="3" fill="#e95420"/>`,
+    distros: `<rect width="32" height="32" rx="8" fill="#241f31"/><circle cx="11" cy="14" r="5" fill="#e95420"/><circle cx="20" cy="12" r="4.5" fill="#1d99f3"/><circle cx="17" cy="21" r="4.2" fill="#35bf5c"/>`,
+    root: `<rect width="32" height="32" rx="8" fill="#c01c28"/><path d="M10 14h12v10H10z" fill="#fff"/><path d="M12 14V11a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2"/>`,
     home: `<rect width="32" height="32" rx="8" fill="#e95420"/><path d="M6 16 L16 8 L26 16 V25 H6 Z" fill="#fff"/>`,
     image: `<rect x="4" y="6" width="24" height="20" rx="3" fill="#c061cb"/>`,
     file: `<path d="M9 5h9l6 6v16H9z" fill="#deddda"/><path d="M18 5v6h6" fill="#c0bfbc"/>`,
@@ -200,6 +202,7 @@ const CATALOG = [
   { id: "browser", cat: "web", score: 4.6 },
   { id: "store", cat: "system", score: 4.7 },
   { id: "distros", cat: "system", score: 4.9 },
+  { id: "root", cat: "system", score: 4.8 },
   { id: "editor", cat: "office", score: 4.5 },
   { id: "writer", cat: "office", score: 4.4 },
   { id: "calcSheet", cat: "office", score: 4.3 },

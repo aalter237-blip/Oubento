@@ -14,26 +14,30 @@ function storeSet(k, v) {
 /* ---------------- Files ---------------- */
 APPS.files = {
   mount(el, ctx) {
-    let path = ctx.opts.path || "/home/oubento";
+    let path = ctx.opts.path || AUTH.current().home;
     let sel = null;
     const go = (p) => {
       path = VFS.norm(p);
       paint();
     };
     const paint = () => {
-      ctx.setTitle(t("files"));
+      ctx.setTitle(t("files") + (AUTH.isRoot() ? " · root" : ""));
       const items = path === "/.trash" ? VFS.list("/.trash") : VFS.list(path);
+      const blocked = !VFS.canWrite(path);
       el.innerHTML = `
         <div class="files">
           <div class="toolbar">
             <button class="ibtn" id="up">↑</button>
             <button class="ibtn" id="home">${t("home")}</button>
+            <button class="ibtn" id="rootfs">/</button>
             <button class="ibtn" id="newd">+</button>
             <button class="ibtn" id="newf">${t("createFile")}</button>
             <button class="ibtn" id="del">${t("delete")}</button>
             ${OS.state.clipboard ? `<button class="ibtn" id="pst">${t("paste")}</button>` : ""}
+            <button class="btn ${AUTH.isRoot() ? "danger" : "primary"}" id="su">${AUTH.isRoot() ? t("dropRoot") : t("asRoot")}</button>
           </div>
-          <div class="files-path">${path}</div>
+          ${blocked ? `<div class="disclaimer">${t("needRootFs")}</div>` : ""}
+          <div class="files-path">${path} ${AUTH.isRoot() ? "· uid=0" : ""}</div>
           <div class="files-grid">
             ${items
               .map((it) => {
@@ -46,17 +50,27 @@ APPS.files = {
           </div>
         </div>`;
       el.querySelector("#up").onclick = () => go(VFS.parent(path));
-      el.querySelector("#home").onclick = () => go("/home/oubento");
+      el.querySelector("#home").onclick = () => go(AUTH.current().home);
+      el.querySelector("#rootfs").onclick = () => go("/");
+      el.querySelector("#su").onclick = async () => {
+        if (AUTH.isRoot()) AUTH.drop();
+        else {
+          const ok = await AUTH.ask(t("authFiles"));
+          if (!ok) return;
+        }
+        paint();
+        renderStatus();
+      };
       el.querySelector("#newd").onclick = async () => {
         const n = prompt(t("createFolder"), OS.settings.lang === "ar" ? "مجلد جديد" : "New folder");
         if (!n) return;
-        await VFS.mkdir(path + "/" + n);
+        try { await VFS.mkdir(path + "/" + n); } catch (e) { notify(e.message, path, "root"); }
         paint();
       };
       el.querySelector("#newf").onclick = async () => {
         const n = prompt(t("createFile"), "note.txt");
         if (!n) return;
-        await VFS.write(path + "/" + n, "");
+        try { await VFS.write(path + "/" + n, ""); } catch (e) { notify(e.message, path, "root"); }
         paint();
       };
       const pst = el.querySelector("#pst");
@@ -137,15 +151,19 @@ APPS.terminal = {
     let cwd = "/home/oubento";
     const hist = [];
     let hi = 0;
-    const env = { USER: OS.user, HOME: "/home/oubento", HOST: OS.hostname, PATH: "/usr/bin" };
+    const env = { USER: OS.user, HOME: AUTH.current().home, HOST: OS.hostname, PATH: "/usr/bin:/bin:/sbin" };
     el.innerHTML = `<div class="term"><div class="term-out" id="tout"></div>
       <div class="term-in"><span class="prompt" id="pr"></span><input id="tin" spellcheck="false"></div></div>`;
     const out = el.querySelector("#tout");
     const input = el.querySelector("#tin");
     const pr = el.querySelector("#pr");
     const prompt = () => {
-      const short = cwd.replace("/home/oubento", "~");
-      pr.textContent = `${OS.user}@${OS.hostname}:${short}$`;
+      env.USER = OS.user;
+      env.HOME = AUTH.current().home;
+      const short = cwd.replace(env.HOME, "~");
+      const mark = AUTH.isRoot() ? "#" : "$";
+      pr.textContent = `${OS.user}@${OS.hostname}:${short}${mark}`;
+      pr.style.color = AUTH.isRoot() ? "#ff8a80" : "#7cfc9a";
     };
     const print = (s, cls = "") => {
       const d = document.createElement("div");
@@ -218,6 +236,10 @@ APPS.terminal = {
       },
       date: () => new Date().toString(),
       whoami: () => OS.user,
+      id: () => {
+        const u = AUTH.current();
+        return `uid=${u.uid}(${OS.user}) gid=${u.gid}(${OS.user}) groups=${u.groups.join(",")}${AUTH.isRoot() ? " euid=0(root)" : ""}`;
+      },
       hostname: () => OS.hostname,
       uname: (a) => (a.includes("-a") ? `Linux ${OS.hostname} 6.8.0-oubento aarch64 GNU/Linux` : "Linux"),
       clear: () => {
@@ -244,7 +266,10 @@ APPS.terminal = {
           " /sssssssshNMMMyhhyyyyhdNMMMNhssssssss/",
         ].join("\n");
       },
-      apt: (a) => {
+      apt: async (a) => {
+        if (["update", "upgrade", "install", "remove"].includes(a[0]) && !AUTH.isRoot()) {
+          return "E: Permission denied. Use: sudo apt " + a.join(" ");
+        }
         if (a[0] === "update") return "Hit:1 oubento-repo noble InRelease\nReading package lists... Done";
         if (a[0] === "upgrade") return "0 upgraded, 0 newly installed.";
         if (a[0] === "install") {
@@ -317,14 +342,32 @@ APPS.terminal = {
         const d = currentDistro();
         return `Distributor ID: ${d.name}\nDescription:    ${d.name} ${d.version} (${d.codename})\nRelease:        ${d.version}\nCodename:       ${d.codename}\nDesktop:        ${d.session}`;
       },
-      sudo: (a) => {
-        if (!a.length) return "usage: sudo <command>";
-        OS.user = "root";
-        env.USER = "root";
-        prompt();
-        return "root privileges (virtual session only — not Android root)";
+      sudo: async (a) => {
+        if (!a.length) return "usage: sudo [-i] <command>";
+        if (a[0] === "-i" || a[0] === "su" || a[0] === "-") {
+          if (!AUTH.isRoot()) {
+            const ok = await AUTH.ask("sudo -i");
+            if (!ok) return "sudo: Authentication failure";
+          }
+          AUTH.session = "root";
+          OS.user = "root";
+          env.USER = "root";
+          env.HOME = "/root";
+          cwd = "/root";
+          prompt();
+          renderStatus();
+          return "root@ " + t("authScope");
+        }
+        if (!AUTH.isRoot()) {
+          const ok = await AUTH.ask("sudo " + a.join(" "));
+          if (!ok) return "sudo: Authentication failure";
+        }
+        return await runInner(a[0], a.slice(1));
       },
-      su: () => commands.sudo(["-"]),
+      su: async (a) => commands.sudo(a[0] === "-" || !a.length ? ["-i"] : a),
+      passwd: () => "Password unchanged. Guest root password remains: ubuntu",
+      chmod: (a) => (AUTH.isRoot() ? "mode of '" + (a[1] || ".") + "' changed to " + (a[0] || "755") : "chmod: Operation not permitted"),
+      chown: (a) => (AUTH.isRoot() ? "ownership of '" + (a[1] || ".") + "' changed" : "chown: Operation not permitted"),
       pacman: (a) => commands.apt(a[0] === "-S" ? ["install", a[1]] : a[0] === "-Syu" ? ["upgrade"] : ["list"]),
       dnf: (a) => commands.apt(a),
       zypper: (a) => commands.apt(a),
@@ -405,11 +448,26 @@ APPS.terminal = {
         }
       },
       exit: () => {
+        if (AUTH.session === "root") {
+          AUTH.drop();
+          env.USER = "oubento";
+          env.HOME = "/home/oubento";
+          cwd = "/home/oubento";
+          prompt();
+          renderStatus();
+          return "logout";
+        }
         const w = OS.state.windows.find((x) => x.app === "terminal" && x.id === OS.state.active);
         if (w) closeWin(w.id);
         return "";
       },
     };
+
+    async function runInner(cmd, args) {
+      const fn = commands[cmd];
+      if (!fn) return cmd + ": command not found";
+      return await fn(args);
+    }
 
     function resolve(p) {
       if (!p) return cwd;
@@ -490,6 +548,7 @@ APPS.settings = {
           ["display", t("display")],
           ["language", t("language")],
           ["users", t("users")],
+          ["root", t("root")],
           ["notifications", t("notifications")],
           ["privacy", t("privacy")],
           ["power", t("power")],
@@ -579,7 +638,11 @@ APPS.settings = {
       } else if (p === "users") {
         page(
           t("users"),
-          `<div class="pad">
+          `<div class="card">
+            <div class="row"><div class="grow">oubento<small>uid 1000 · sudo</small></div>${AUTH.session === "oubento" ? "●" : ""}</div>
+            <div class="row"><div class="grow">root<small>uid 0 · ${t("authScope")}</small></div>${AUTH.session === "root" ? "●" : ""}</div>
+          </div>
+          <div class="pad">
             <input class="field" id="dn" value="${OS.settings.displayName}">
             <p></p>
             <input class="field" id="pw" type="password" placeholder="${t("password")}">
@@ -590,9 +653,12 @@ APPS.settings = {
         el.querySelector("#sv").onclick = () => {
           OS.settings.displayName = el.querySelector("#dn").value;
           OS.settings.pin = el.querySelector("#pw").value;
+          if (el.querySelector("#pw").value) AUTH.users.oubento.pass = el.querySelector("#pw").value;
           saveSettings();
           notify(t("saved"), "", "users");
         };
+      } else if (p === "root") {
+        launch("root");
       } else if (p === "notifications") {
         page(t("notifications"), `<div class="pad">${OS.state.notifs.length} — ${t("notifications")}</div>`);
       } else if (p === "privacy") {
@@ -1395,6 +1461,36 @@ APPS.updater = {
   },
 };
 
+APPS.root = {
+  mount(el) {
+    const paint = () => {
+      el.innerHTML = `
+        <div class="disclaimer">${t("authScope")}</div>
+        <div class="hero-about">
+          <h2>${AUTH.isRoot() ? "uid 0 · root" : "oubento · sudo"}</h2>
+          <div>${t("authNeed")}</div>
+        </div>
+        <div class="card">
+          <div class="row"><div class="grow">whoami</div>${OS.user}</div>
+          <div class="row"><div class="grow">euid</div>${AUTH.isRoot() ? "0" : "1000"}</div>
+          <div class="row"><div class="grow">sudo</div>${AUTH.isRoot() ? t("authOn") : t("authOff")}</div>
+          <div class="row"><div class="grow">${t("password")}</div>ubuntu</div>
+        </div>
+        <div class="pad">
+          <button class="btn primary" id="up" style="width:100%;margin-bottom:8px">${AUTH.isRoot() ? t("dropRoot") : t("asRoot")}</button>
+          <p class="muted">${t("rootHelp")}</p>
+        </div>`;
+      el.querySelector("#up").onclick = async () => {
+        if (AUTH.isRoot()) AUTH.drop();
+        else await AUTH.ask(t("authTitle"));
+        paint();
+        renderStatus();
+      };
+    };
+    paint();
+  },
+};
+
 APPS.distros = {
   mount(el) {
     const paint = () => {
@@ -1750,6 +1846,6 @@ APPS.puzzle = {
 };
 
 /* default install extras so the OS feels complete on first boot */
-["calculator", "calendar", "clock", "weather", "notes", "gallery", "music", "camera", "contacts", "messages", "editor", "writer", "calcSheet", "maps", "monitor", "todo", "mail", "code", "mines", "snake", "puzzle", "trash", "updater", "disks", "logs", "converter", "flashlight", "videos", "recorder", "distros"].forEach((id) => {
+["calculator", "calendar", "clock", "weather", "notes", "gallery", "music", "camera", "contacts", "messages", "editor", "writer", "calcSheet", "maps", "monitor", "todo", "mail", "code", "mines", "snake", "puzzle", "trash", "updater", "disks", "logs", "converter", "flashlight", "videos", "recorder", "distros", "root"].forEach((id) => {
   if (!OS.settings.installed.includes(id)) OS.settings.installed.push(id);
 });

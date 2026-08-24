@@ -437,6 +437,22 @@ canvas.game { background: #111; border-radius: 12px; max-width: 100%; touch-acti
 #install .grow { flex: 1; }
 #install small { color: #d7cbc5; }
 
+.root-badge {
+  background: #c01c28; color: #fff; font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; padding: 3px 7px; border-radius: 8px;
+}
+.polkit {
+  position: absolute; inset: 0; z-index: 96;
+  background: rgba(8,4,6,.55); display: grid; place-items: center; padding: 18px;
+}
+.pk-card {
+  width: min(360px, 92vw); background: var(--surface); color: var(--ink);
+  border-radius: 18px; padding: 18px; box-shadow: var(--shadow); text-align: center;
+}
+.pk-icon { width: 52px; height: 52px; margin: 0 auto 8px; }
+.pk-card h3 { margin: 0 0 6px; }
+.pk-card p { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+
 html[dir="ltr"] { }
 .hidden { display: none !important; }
 

@@ -26,6 +26,10 @@ function renderLock() {
       <div class="lock-user">
         <div class="lock-avatar">${(OS.settings.displayName || "U").slice(0, 1)}</div>
         <div class="lock-name">${OS.settings.displayName}</div>
+        <select class="session-pick" id="acct">
+          <option value="oubento">oubento (sudo)</option>
+          <option value="root">root (uid 0)</option>
+        </select>
         <select class="session-pick" id="sess">
           ${DISTROS.map((d) => `<option value="${d.id}" ${d.id === currentDistro().id ? "selected" : ""}>${OS.settings.lang === "ar" ? d.ar : d.name} — ${d.session}</option>`).join("")}
         </select>
@@ -38,15 +42,21 @@ function renderLock() {
     </div>`;
   const unlock = () => {
     const val = document.getElementById("pin").value;
-    if (OS.settings.pin && val !== OS.settings.pin && val !== "ubuntu") {
+    const acct = document.getElementById("acct")?.value || "oubento";
+    if (!AUTH.login(acct, val) && val && val !== OS.settings.pin) {
       notify(t("pinWrong"), "");
       return;
     }
+    if (acct === "oubento" && OS.settings.pin && val && val !== OS.settings.pin && val !== "ubuntu") {
+      notify(t("pinWrong"), "");
+      return;
+    }
+    AUTH.login(acct, val || "ubuntu");
     const pick = document.getElementById("sess");
     if (pick) applyDistro(pick.value, { persist: true, rerender: true });
     OS.state.locked = false;
     document.getElementById("lock").hidden = true;
-    log("session unlocked");
+    log("session unlocked " + AUTH.session);
   };
   document.getElementById("unlockBtn").onclick = unlock;
   document.getElementById("pin").addEventListener("keydown", (e) => {
@@ -79,6 +89,7 @@ function renderDesktop() {
     <div id="toasts"></div>
     <div id="install" hidden></div>
     <div id="ctx" class="ctx" hidden></div>
+    <div id="polkit" class="polkit" hidden></div>
   `;
   renderStatus();
   renderDock();
@@ -95,6 +106,7 @@ function renderStatus() {
   if (!side) return;
   const wifi = OS.settings.wifi && !OS.settings.airplane ? "●" : "○";
   side.innerHTML = `
+    ${AUTH && AUTH.isRoot() ? '<span class="root-badge">ROOT</span>' : ""}
     <span class="act">${wifi} ${OS.settings.airplane ? "✈" : ""}</span>
     <span class="act" id="batTxt">🔋</span>
     <span class="act">${fmtTime()}</span>`;
@@ -105,7 +117,7 @@ function renderStatus() {
 }
 
 function dockApps() {
-  const fav = ["browser", "files", "terminal", "distros", "store", "settings"];
+  const fav = ["browser", "files", "terminal", "root", "distros", "settings"];
   return fav.filter(isInstalled);
 }
 

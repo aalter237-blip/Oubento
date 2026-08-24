@@ -4,6 +4,15 @@
 
 يعمل كتطبيق مستقل بملء الشاشة بعد التثبيت. **ليس** نواة لينكس على الهاتف، و**ليس** روت لأندرويد.
 
+## روت داخل أوبنتو فقط
+
+- حسابان: `oubento` (sudo) و `root` (uid 0)
+- كلمة المرور الافتراضية: `ubuntu`
+- الطرفية: `sudo -i` أو `su -` — الموجّه يصبح `#`
+- الملفات: زر **فتح كمسؤول** لمسارات مثل `/etc` و `/usr`
+- تطبيق **الجذر** وحوار تصريح (PolicyKit)
+- لا يمس نظام الهاتف
+
 ## التوزيعات المضمّنة (جلسات سطح مكتب)
 
 Ubuntu · Kubuntu · Xubuntu · Lubuntu · Ubuntu MATE · Ubuntu Budgie · Ubuntu Unity · Edubuntu · Debian · Linux Mint · Pop!_OS · elementary OS · Zorin OS · Fedora · Manjaro · Arch · openSUSE · AlmaLinux
