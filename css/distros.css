@@ -1,0 +1,85 @@
+html[data-de="plasma"] .topbar { background: #1e1e20ee; }
+html[data-de="plasma"] .dock {
+  left: 0; right: 0; bottom: 0; height: 54px;
+  border-radius: 0; border: 0; border-top: 1px solid rgba(255,255,255,.08);
+}
+html[data-de="plasma"] .dock .app-ico { width: 40px; height: 40px; }
+html[data-de="plasma"] .home-pill { border-radius: 8px; background: var(--orange); }
+
+html[data-de="xfce"] .topbar { height: calc(28px + var(--safe-t)); font-size: 12px; }
+html[data-de="xfce"] .dock {
+  left: 0; right: 0; bottom: 0; height: 42px; border-radius: 0;
+}
+html[data-de="xfce"] .dock .app-ico { width: 32px; height: 32px; }
+
+html[data-de="lxqt"] .topbar { display: none; }
+html[data-de="lxqt"] .dock {
+  left: 0; right: 0; bottom: 0; height: 48px; border-radius: 0;
+}
+html[data-de="lxqt"] .desktop-icons { top: calc(12px + var(--safe-t)); }
+html[data-de="lxqt"] #windows .window { padding-top: var(--safe-t); }
+
+html[data-de="unity"] .dock {
+  top: calc(var(--bar) + var(--safe-t));
+  left: 0; right: auto; bottom: 0;
+  width: 58px; height: auto; flex-direction: column;
+  border-radius: 0 14px 0 0; padding: 8px 4px;
+}
+html[data-de="unity"] .dock .app-ico { width: 44px; height: 44px; }
+html[data-de="unity"] .desktop-icons { inset-inline-start: 70px; }
+html[data-de="unity"] #overview { padding-inline-start: 70px; }
+
+html[data-de="mate"] .dock {
+  left: 0; right: 0; bottom: 0; height: 40px; border-radius: 0;
+}
+html[data-de="mate"] .dock .app-ico { width: 30px; height: 30px; }
+
+html[data-de="budgie"] .topbar { background: #3b4252cc; }
+html[data-de="budgie"] .dock {
+  top: calc(var(--bar) + var(--safe-t) + 8px);
+  inset-inline-end: 8px; inset-inline-start: auto;
+  bottom: calc(12px + var(--safe-b));
+  width: 62px; height: auto; flex-direction: column;
+  border-radius: 18px;
+}
+html[data-de="budgie"] .desktop-icons { inset-inline-end: auto; }
+
+html[data-de="cinnamon"] .topbar { display: none; }
+html[data-de="cinnamon"] .dock {
+  left: 0; right: 0; bottom: 0; height: 46px; border-radius: 0;
+  justify-content: flex-start;
+}
+html[data-de="cinnamon"] .desktop-icons { top: calc(12px + var(--safe-t)); }
+html[data-de="cinnamon"] .clock-center { position: static; transform: none; }
+
+html[data-de="pantheon"] .dock {
+  left: 16px; right: 16px; bottom: calc(14px + var(--safe-b));
+  height: 64px; border-radius: 20px;
+}
+html[data-de="cosmic"] .topbar { background: #111c; }
+html[data-de="cosmic"] .dock {
+  left: 12px; right: 12px; bottom: calc(12px + var(--safe-b));
+  border-radius: 16px; background: #111a;
+}
+
+.session-pick {
+  width: min(280px, 86vw);
+  border: 0; border-radius: 12px; padding: 10px 12px;
+  background: rgba(255,255,255,.16); color: #fff; outline: none;
+  backdrop-filter: blur(16px);
+}
+.session-pick option { color: #111; }
+
+.distro-grid { display: grid; gap: 10px; padding: 10px; }
+.distro-card {
+  display: flex; gap: 12px; align-items: center; text-align: start;
+  padding: 12px; border-radius: 16px; border: 1px solid var(--line);
+  background: var(--surface-2); width: 100%;
+}
+.distro-card.on { outline: 2px solid var(--orange); }
+.distro-swatch { width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0; }
+.disclaimer {
+  margin: 12px; padding: 12px; border-radius: 14px;
+  background: color-mix(in srgb, var(--orange) 12%, var(--surface-2));
+  font-size: 13px; line-height: 1.5;
+}
