@@ -25,23 +25,24 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xfce4 xfce4-goodies xrdp dbus-x11 \
+            xfce4 xfce4-goodies xrdp dbus-x11 xorgxrdp \
             openssh-server curl wget git nano htop unzip python3-pip
 
-      - name: Create User & Fix XRDP Black Screen
+      - name: Create User & Fix XFCE XRDP Session
         run: |
           sudo useradd -m -s /bin/bash ss
           echo "ss:1234" | sudo chpasswd
           sudo usermod -aG sudo,ssl-cert ss
 
-          cat << 'EOF' | sudo tee /home/ss/.xsession
-          unset DBUS_SESSION_BUS_ADDRESS
-          unset XDG_RUNTIME_DIR
-          startxfce4
-          EOF
-
+          # إعداد ملف .xsession مع تشغيل dbus-launch بشكل سليم
+          echo "dbus-launch --exit-with-session startxfce4" | sudo tee /home/ss/.xsession
           sudo chown ss:ss /home/ss/.xsession
           sudo chmod +x /home/ss/.xsession
+
+          # تعديل ملف startwm.sh الأساسي لـ XRDP لضمان تحميل XFCE
+          sudo sed -i 's/^test -x \/etc\/X11\/Xsession/#&/' /etc/xrdp/startwm.sh
+          sudo sed -i 's/^exec \/bin\/sh \/etc\/X11\/Xsession/#&/' /etc/xrdp/startwm.sh
+          echo "dbus-launch --exit-with-session startxfce4" | sudo tee -a /etc/xrdp/startwm.sh
 
           sudo sed -i 's/max_bpp=32/max_bpp=16/g' /etc/xrdp/xrdp.ini
 
