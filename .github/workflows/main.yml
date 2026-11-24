@@ -1,10 +1,10 @@
-name: Ubuntu Linux Desktop & SSH
+name: Android Virtual Environment & Tailscale
 
 on:
   workflow_dispatch:
     inputs:
       duration_hours:
-        description: 'مدة تشغيل السيرفر بالساعات (1 إلى 6)'
+        description: 'مدة تشغيل بيئة الأندرويد بالساعات (1 إلى 6)'
         required: true
         default: '3'
         type: choice
@@ -16,56 +16,69 @@ on:
           - '6'
 
 jobs:
-  ubuntu-vm:
+  android-vm:
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
-      - name: Update System & Install XFCE + XRDP + Apps
+      - name: Install KVM & Android SDK Tools
         run: |
           sudo apt-get update -y
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xfce4 xfce4-goodies xrdp dbus-x11 xorgxrdp \
-            openssh-server curl wget git nano htop unzip python3-pip
+            qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils \
+            cpu-checker unzip wget curl adb socat xvfb x11vnc
 
-      - name: Create User & Fix XFCE XRDP Session
+          sudo kvm-ok || true
+          sudo usermod -aG kvm $USER || true
+
+          mkdir -p ~/android-sdk/cmdline-tools
+          cd ~/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+
+          export ANDROID_HOME=$HOME/android-sdk
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
+
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "emulator" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
+
+          echo "no" | avdmanager create avd -n android34 -k "system-images;android-34;google_apis;x86_64" --device "pixel_6" --force
+
+      - name: Start Android Emulator & ADB Forward
         run: |
-          sudo useradd -m -s /bin/bash ss
-          echo "ss:1234" | sudo chpasswd
-          sudo usermod -aG sudo,ssl-cert ss
+          export ANDROID_HOME=$HOME/android-sdk
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
 
-          # إعداد ملف .xsession مع تشغيل dbus-launch بشكل سليم
-          echo "dbus-launch --exit-with-session startxfce4" | sudo tee /home/ss/.xsession
-          sudo chown ss:ss /home/ss/.xsession
-          sudo chmod +x /home/ss/.xsession
+          nohup emulator -avd android34 -no-audio -no-window -gpu swiftshader_indirect -grpc-use-jwt 2>&1 > ~/emulator.log &
 
-          # تعديل ملف startwm.sh الأساسي لـ XRDP لضمان تحميل XFCE
-          sudo sed -i 's/^test -x \/etc\/X11\/Xsession/#&/' /etc/xrdp/startwm.sh
-          sudo sed -i 's/^exec \/bin\/sh \/etc\/X11\/Xsession/#&/' /etc/xrdp/startwm.sh
-          echo "dbus-launch --exit-with-session startxfce4" | sudo tee -a /etc/xrdp/startwm.sh
+          echo "جاري انتظار إقلاع نظام الأندرويد..."
+          adb wait-for-device
+          while [ "$(adb shell getprop sys.boot_completed 2>/dev/null)" != "1" ]; do
+            sleep 3
+          done
+          echo "تم إقلاع نظام الأندرويد بنجاح!"
 
-          sudo sed -i 's/max_bpp=32/max_bpp=16/g' /etc/xrdp/xrdp.ini
-
-          sudo systemctl enable xrdp ssh
-          sudo systemctl restart xrdp ssh
+          adb tcpip 5555
+          nohup socat TCP-LISTEN:5555,bind=0.0.0.0,fork TCP:127.0.0.1:5555 >/dev/null 2>&1 &
 
       - name: Install & Connect Tailscale
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey="${TS_AUTHKEY}" --hostname=gh-ubuntu-linux
+          sudo tailscale up --authkey="${TS_AUTHKEY}" --hostname=gh-android-vm
           sleep 3
           IP=$(tailscale ip -4)
           echo "========================================="
-          echo "Ubuntu IP Address : $IP"
-          echo "Username          : ss"
-          echo "Password          : 1234"
+          echo "Android Tailscale IP : $IP"
+          echo "ADB Port             : 5555"
+          echo "Connect Command      : adb connect $IP:5555"
           echo "========================================="
 
       - name: Keep Session Alive (Timed)
         run: |
           HOURS=${{ github.event.inputs.duration_hours }}
           SECONDS_TO_RUN=$((HOURS * 3600))
-          echo "السيرفر سيعمل لمدة $HOURS ساعات..."
+          echo "بيئة الأندرويد ستعمل لمدة $HOURS ساعات..."
           sleep $SECONDS_TO_RUN
